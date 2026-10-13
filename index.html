@@ -5,7 +5,11 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>PDF Tools — Gabung & Pisah PDF Gratis, 100% di Browser</title>
 <meta name="description" content="Gabungkan atau pisahkan PDF dan gambar. Semua proses di browser, file tidak pernah di-upload.">
-<meta name="theme-color" content="#16a34a">
+<meta name="theme-color" content="#16a34a" id="themeColorMeta">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" type="image/png" sizes="192x192" href="assets/icons/icon-192.png">
+<link rel="icon" type="image/png" sizes="512x512" href="assets/icons/icon-512.png">
+<link rel="apple-touch-icon" href="assets/icons/icon-192.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
@@ -20,6 +24,10 @@
 <header class="topbar">
   <div class="brand"><span class="brand-mark">📄</span><strong>PDF Tools</strong></div>
   <div class="tagline">PDF &amp; gambar — 100% di browser, tanpa upload</div>
+  <div class="top-actions">
+    <button id="installBtn" class="btn btn-install" type="button" hidden>📲 Install</button>
+    <button id="themeToggle" class="icon-btn theme-toggle" type="button" aria-label="Ganti mode gelap/terang" title="Mode gelap/terang">🌙</button>
+  </div>
 </header>
 
 <nav class="tabs" aria-label="Mode">
@@ -72,6 +80,12 @@
       </div>
     </div>
     <p id="qualityNote" class="field-note" hidden>Mode Tinggi/Sedang/Rendah mengubah tiap halaman menjadi gambar agar jauh lebih kecil — teks tidak bisa diseleksi/dicari.</p>
+    <div class="preset-row" aria-label="Preset cepat">
+      <span class="opt-label">Preset:</span>
+      <button class="btn btn-chip" type="button" data-preset="wa">📱 Buat WA</button>
+      <button class="btn btn-chip" type="button" data-preset="email">✉️ Buat Email</button>
+      <button class="btn btn-chip" type="button" data-preset="max">💎 Kualitas Maksimal</button>
+    </div>
     <label class="check-row">
       <input id="optimizeCheck" type="checkbox" checked>
       <span>Optimalkan ukuran file <small class="muted">(tanpa mengurangi kualitas)</small></span>
@@ -88,6 +102,15 @@
     <p id="resultInfo" class="result-info" hidden></p>
     <p class="privacy">🔒 Semua proses di perangkatmu. Tidak ada file yang dikirim ke server.</p>
   </div>
+
+  <section id="historySection" class="history" hidden aria-label="Riwayat pemrosesan">
+    <div class="history-head">
+      <h2>🕘 Terakhir diproses</h2>
+      <button id="historyClearBtn" class="btn btn-ghost btn-danger" type="button">Hapus semua</button>
+    </div>
+    <p class="history-note">🔒 Isi file <strong>tidak</strong> disimpan — ini hanya catatan (nama, tanggal, ukuran).</p>
+    <ul id="historyList" class="history-list"></ul>
+  </section>
 
   <section class="howto">
     <h2>Cara pakai — Gabung</h2>
@@ -160,6 +183,23 @@
 </main>
 
 <footer class="footer"><div>PDF Tools - By Rizoglabs</div><div class="footer-sub">berjalan sepenuhnya di browser</div></footer>
+
+<div id="previewModal" class="modal" hidden role="dialog" aria-modal="true" aria-label="Pratinjau hasil">
+  <div class="modal-card">
+    <div class="modal-head">
+      <div>
+        <div id="previewTitle" class="modal-title">Pratinjau hasil</div>
+        <div id="previewInfo" class="modal-sub"></div>
+      </div>
+      <button id="previewClose" class="icon-btn" type="button" aria-label="Tutup pratinjau">✕</button>
+    </div>
+    <div id="previewBody" class="modal-body"></div>
+    <div class="modal-foot">
+      <button id="previewDownload" class="btn btn-primary" type="button">⬇ Download</button>
+      <button id="previewAgain" class="btn" type="button">Proses lagi</button>
+    </div>
+  </div>
+</div>
 
 <div id="toast" class="toast" role="status"></div>
 

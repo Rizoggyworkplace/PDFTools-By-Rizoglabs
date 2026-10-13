@@ -268,6 +268,46 @@ test("splitName: nama file bagian + sanitasi", () => {
   assert.equal(U.splitName("", "1-2"), "gabungan_1-2.pdf");
 });
 
+/* ---------- fitur baru: preset satu-klik ---------- */
+
+test("presetConfig: mapping preset -> kualitas & optimasi", () => {
+  assert.deepEqual(U.presetConfig("wa"), { quality: "rendah", optimize: true });
+  assert.deepEqual(U.presetConfig("email"), { quality: "sedang", optimize: true });
+  assert.deepEqual(U.presetConfig("max"), { quality: "asli", optimize: true });
+  assert.equal(U.presetConfig("tidak-ada"), null);
+  assert.equal(U.presetConfig(""), null);
+});
+
+test("presetKeys: tiga preset tersedia", () => {
+  assert.deepEqual(U.presetKeys().sort(), ["email", "max", "wa"]);
+});
+
+/* ---------- fitur baru: riwayat lokal ---------- */
+
+test("pushHistory: item baru di depan, dibatasi maksimal", () => {
+  const mk = (n) => ({ name: "f" + n + ".pdf", date: "2026-10-13T00:00:00Z", sizeBytes: n * 100, pageCount: n, quality: "asli" });
+  let list = [];
+  for (let i = 1; i <= 12; i++) list = U.pushHistory(list, mk(i));
+  assert.equal(list.length, U.HISTORY_MAX);
+  assert.equal(list[0].name, "f12.pdf"); // terbaru di depan
+  assert.equal(list[9].name, "f3.pdf");  // yang lama terbuang
+});
+
+test("pushHistory: sanitasi item & tidak mutasi array asal", () => {
+  const src = [{ name: "a.pdf", date: "2026-10-13T00:00:00Z", sizeBytes: 10, pageCount: 1, quality: "x" }];
+  const out = U.pushHistory(src, { name: null, sizeBytes: -5, pageCount: "3" });
+  assert.equal(src.length, 1); // asal tidak berubah
+  assert.equal(out.length, 2);
+  assert.equal(out[0].name, "tanpa nama");
+  assert.equal(out[0].sizeBytes, 0);
+  assert.equal(out[0].pageCount, 3);
+  const empty = U.pushHistory(null, { name: "b.pdf" });
+  assert.equal(empty.length, 1);
+  assert.ok(empty[0].date); // tanggal otomatis diisi
+});
+
+/* ---------- fitur: split (buildSplit) ---------- */
+
 test("buildSplit: pecah PDF jadi beberapa file sesuai rentang", async () => {
   const a = await makePdf([[100, 100], [200, 200], [300, 300], [400, 400], [500, 500]]);
   const aBytes = await a.save();

@@ -141,6 +141,38 @@
     return out;
   }
 
+  /* ---------- preset satu-klik (murni, bisa di-test) ---------- */
+
+  // key -> {quality, optimize}. Dipakai tombol preset di panel Gabung.
+  var PRESETS = {
+    wa:    { quality: "rendah", optimize: true,  label: "Buat WA" },
+    email: { quality: "sedang", optimize: true,  label: "Buat Email" },
+    max:   { quality: "asli",   optimize: true,  label: "Kualitas Maksimal" },
+  };
+  function presetConfig(key) {
+    var p = PRESETS[key];
+    return p ? { quality: p.quality, optimize: p.optimize } : null;
+  }
+  function presetKeys() { return Object.keys(PRESETS); }
+
+  /* ---------- riwayat lokal (murni, bisa di-test) ---------- */
+
+  var HISTORY_MAX = 10;
+  // Tambah item ke depan daftar, batasi maksimal. Mengembalikan array BARU.
+  // item: {name, date (ISO string), sizeBytes, pageCount, quality}
+  function pushHistory(list, item, max) {
+    var m = max && max > 0 ? Math.floor(max) : HISTORY_MAX;
+    var arr = Array.isArray(list) ? list.slice() : [];
+    arr.unshift({
+      name: String(item && item.name != null ? item.name : "tanpa nama"),
+      date: String(item && item.date != null ? item.date : new Date().toISOString()),
+      sizeBytes: Math.max(0, Math.floor(Number(item && item.sizeBytes) || 0)),
+      pageCount: Math.max(0, Math.floor(Number(item && item.pageCount) || 0)),
+      quality: String(item && item.quality != null ? item.quality : ""),
+    });
+    return arr.slice(0, m);
+  }
+
   return {
     resolveFileName: resolveFileName,
     fmtSize: fmtSize,
@@ -150,5 +182,9 @@
     buildPdf: buildPdf,
     applyPageNumbers: applyPageNumbers,
     buildSplit: buildSplit,
+    presetConfig: presetConfig,
+    presetKeys: presetKeys,
+    pushHistory: pushHistory,
+    HISTORY_MAX: HISTORY_MAX,
   };
 });

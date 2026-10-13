@@ -429,27 +429,22 @@
       const fileName = U.resolveFileName(fileNameInput.value);
       const optimize = optimizeCheck.checked;
       const pageNumbers = pageNumCheck.checked;
-      const pageNumPos = pageNumPos.value;
+      const pageNumPosVal = pageNumPos.value;
       let bytes, plainBytes = null, srcBytes = 0;
 
       if (quality === "asli") {
         // Halaman gambar yang diputar di-bake dulu via canvas (PDF pakai rotasi native).
         const prepared = await prepareChosen(chosen);
-        const r = await U.buildPdf(PDFLib, prepared, { optimize: optimize, pageNumbers: pageNumbers, pageNumPos: pageNumPos });
+        const r = await U.buildPdf(PDFLib, prepared, { optimize: optimize, pageNumbers: pageNumbers, pageNumPos: pageNumPosVal });
         bytes = r.bytes; plainBytes = r.plainBytes;
       } else {
         const preset = LOSSY[quality];
-        const r = await buildLossyPdf(chosen, preset, pageNumbers, pageNumPos);
+        const r = await buildLossyPdf(chosen, preset, pageNumbers, pageNumPosVal);
         bytes = r.bytes;
         srcBytes = chosen.reduce((s, p) => s + (p.pdfBytes ? p.pdfBytes.length : Math.round((p.imgDataUrl.length * 3) / 4)), 0);
       }
 
-      const blob = new Blob([bytes], { type: "application/pdf" });
-      const a = document.createElement("a");
-      a.href = URL.createObjectURL(blob);
-      a.download = fileName;
-      document.body.appendChild(a); a.click(); a.remove();
-      setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+      saveSettings();
 
       let info = "Ukuran hasil: " + U.fmtSize(bytes.length);
       const base = plainBytes || (srcBytes > 0 ? { length: srcBytes } : null);
@@ -459,6 +454,26 @@
       }
       resultInfo.textContent = info;
       resultInfo.hidden = false;
+      addHistory({
+        name: fileName,
+        date: new Date().toISOString(),
+        sizeBytes: bytes.length,
+        pageCount: chosen.length,
+        quality: quality,
+      });
+
+      // pratinjau sebelum download
+      const blob = new Blob([bytes], { type: "application/pdf" });
+      const frame = document.createElement("iframe");
+      frame.title = "Pratinjau " + fileName;
+      openPreview({
+        title: "Pratinjau hasil gabungan",
+        sub: fileName + " · " + info + " · " + chosen.length + " halaman",
+        bodyNode: frame,
+        blob: blob,
+        fileName: fileName,
+        downloadLabel: "⬇ Download PDF",
+      });
       toast("Berhasil! " + chosen.length + " halaman digabung.");
     } catch (err) {
       console.error(err);
@@ -609,14 +624,38 @@
       }
       const zipName = U.resolveFileName(base + "_pisah").replace(/\.pdf$/i, "") + ".zip";
       const blob = await zip.generateAsync({ type: "blob" });
-      const a = document.createElement("a");
-      a.href = URL.createObjectURL(blob);
-      a.download = zipName;
-      document.body.appendChild(a); a.click(); a.remove();
-      setTimeout(() => URL.revokeObjectURL(a.href), 4000);
       splitResultInfo.textContent = parts.length + " file dibuat (" +
         parts.map((x) => x.label).join(", ") + ") · total " + U.fmtSize(total);
       splitResultInfo.hidden = false;
+      addHistory({
+        name: zipName,
+        date: new Date().toISOString(),
+        sizeBytes: blob.size,
+        pageCount: splitDoc.numPages,
+        quality: "pisah",
+      });
+
+      // pratinjau daftar file sebelum download ZIP
+      const ul = document.createElement("ul");
+      ul.className = "modal-list";
+      for (const part of parts) {
+        const li = document.createElement("li");
+        const nm = document.createElement("span");
+        nm.textContent = U.splitName(base, part.label);
+        const sz = document.createElement("span");
+        sz.className = "m-size";
+        sz.textContent = U.fmtSize(part.bytes.length);
+        li.appendChild(nm); li.appendChild(sz);
+        ul.appendChild(li);
+      }
+      openPreview({
+        title: "Hasil pisahan PDF",
+        sub: parts.length + " file · total " + U.fmtSize(total),
+        bodyNode: ul,
+        blob: blob,
+        fileName: zipName,
+        downloadLabel: "⬇ Download ZIP",
+      });
       toast("Berhasil! " + parts.length + " file dalam ZIP.");
     } catch (err) {
       console.error(err);
@@ -625,6 +664,212 @@
     splitBtn.innerHTML = oldLabel;
     splitBtn.disabled = false;
   });
+
+  /* ---------- fitur: mode gelap ---------- */
+
+  const themeToggle = $("themeToggle"), themeColorMeta = $("themeColorMeta");
+  const THEME_KEY = "pdftools-theme";
+  function applyTheme(t) {
+    document.documentElement.dataset.theme = t;
+    themeToggle.textContent = t === "dark" ? "☀️" : "🌙";
+    themeToggle.setAttribute("aria-label", t === "dark" ? "Ganti ke mode terang" : "Ganti ke mode gelap");
+    if (themeColorMeta) themeColorMeta.content = t === "dark" ? "#0c1322" : "#16a34a";
+  }
+  (function initTheme() {
+    let t = null;
+    try { t = localStorage.getItem(THEME_KEY); } catch (e) {}
+    if (t !== "dark" && t !== "light") {
+      t = (window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches) ? "dark" : "light";
+    }
+    applyTheme(t);
+  })();
+  themeToggle.addEventListener("click", () => {
+    const next = document.documentElement.dataset.theme === "dark" ? "light" : "dark";
+    applyTheme(next);
+    try { localStorage.setItem(THEME_KEY, next); } catch (e) {}
+  });
+
+  /* ---------- fitur: PWA (service worker + install) ---------- */
+
+  const installBtn = $("installBtn");
+  if ("serviceWorker" in navigator && /^https?:$/.test(location.protocol)) {
+    window.addEventListener("load", () => {
+      navigator.serviceWorker.register("sw.js").catch((e) => console.warn("SW gagal:", e));
+    });
+  }
+  let deferredPrompt = null;
+  const hideInstall = () => { installBtn.hidden = true; deferredPrompt = null; };
+  window.addEventListener("beforeinstallprompt", (e) => {
+    e.preventDefault();
+    deferredPrompt = e;
+    if (!(window.matchMedia && window.matchMedia("(display-mode: standalone)").matches)) {
+      installBtn.hidden = false;
+    }
+  });
+  installBtn.addEventListener("click", async () => {
+    if (!deferredPrompt) return;
+    deferredPrompt.prompt();
+    try { await deferredPrompt.userChoice; } catch (e) {}
+    hideInstall();
+  });
+  window.addEventListener("appinstalled", hideInstall);
+
+  /* ---------- fitur: preset satu-klik ---------- */
+
+  const presetBtns = Array.prototype.slice.call(document.querySelectorAll("[data-preset]"));
+  function clearPresetActive() { presetBtns.forEach((b) => b.classList.remove("active")); }
+  presetBtns.forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const cfg = U.presetConfig(btn.getAttribute("data-preset"));
+      if (!cfg) return;
+      const r = document.querySelector('input[name="quality"][value="' + cfg.quality + '"]');
+      if (r) r.checked = true;
+      optimizeCheck.checked = cfg.optimize;
+      qualityNote.hidden = cfg.quality === "asli";
+      clearPresetActive();
+      btn.classList.add("active");
+      saveSettings();
+      toast("Preset diterapkan: " + btn.textContent.trim());
+    });
+  });
+
+  /* ---------- fitur: modal pratinjau ---------- */
+
+  const previewModal = $("previewModal"), previewTitle = $("previewTitle"),
+    previewInfo = $("previewInfo"), previewBody = $("previewBody"),
+    previewDownload = $("previewDownload"), previewAgain = $("previewAgain"),
+    previewClose = $("previewClose");
+
+  function openPreview(opts) {
+    closePreview();
+    previewTitle.textContent = opts.title || "Pratinjau hasil";
+    previewInfo.textContent = opts.sub || "";
+    previewBody.innerHTML = "";
+    const url = URL.createObjectURL(opts.blob);
+    if (opts.bodyNode) {
+      if (opts.bodyNode.tagName === "IFRAME") opts.bodyNode.src = url;
+      previewBody.appendChild(opts.bodyNode);
+    }
+    previewModal._blobUrl = url;
+    previewModal._fileName = opts.fileName || "hasil.pdf";
+    previewDownload.textContent = opts.downloadLabel || "⬇ Download";
+    previewModal.hidden = false;
+    document.body.style.overflow = "hidden";
+  }
+  function closePreview() {
+    if (!previewModal.hidden) {
+      previewModal.hidden = true;
+      document.body.style.overflow = "";
+    }
+    if (previewModal._blobUrl) {
+      const u = previewModal._blobUrl;
+      setTimeout(() => URL.revokeObjectURL(u), 5000);
+      previewModal._blobUrl = null;
+    }
+    previewBody.innerHTML = "";
+  }
+  previewDownload.addEventListener("click", () => {
+    if (!previewModal._blobUrl) return;
+    const a = document.createElement("a");
+    a.href = previewModal._blobUrl;
+    a.download = previewModal._fileName;
+    document.body.appendChild(a); a.click(); a.remove();
+    toast("Mengunduh " + previewModal._fileName);
+  });
+  previewClose.addEventListener("click", closePreview);
+  previewAgain.addEventListener("click", closePreview);
+  previewModal.addEventListener("click", (e) => { if (e.target === previewModal) closePreview(); });
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && !previewModal.hidden) closePreview();
+  });
+
+  /* ---------- fitur: riwayat lokal ---------- */
+
+  const HIST_KEY = "pdftools-history-v1";
+  const historySection = $("historySection"), historyList = $("historyList"),
+    historyClearBtn = $("historyClearBtn");
+
+  function loadHistory() {
+    try {
+      const r = JSON.parse(localStorage.getItem(HIST_KEY));
+      return Array.isArray(r) ? r : [];
+    } catch (e) { return []; }
+  }
+  function saveHistoryList(list) {
+    try { localStorage.setItem(HIST_KEY, JSON.stringify(list)); } catch (e) {}
+  }
+  function fmtHistDate(iso) {
+    try {
+      const d = new Date(iso);
+      return d.toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" }) +
+        " " + d.toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" });
+    } catch (e) { return ""; }
+  }
+  function renderHistory() {
+    const list = loadHistory();
+    historySection.hidden = list.length === 0;
+    historyList.innerHTML = "";
+    list.forEach((h, i) => {
+      const li = document.createElement("li");
+      li.className = "history-item";
+      const nm = document.createElement("span");
+      nm.className = "h-name"; nm.textContent = h.name; nm.title = h.name;
+      const meta = document.createElement("span");
+      meta.className = "h-meta";
+      meta.textContent = fmtHistDate(h.date) + " · " + U.fmtSize(h.sizeBytes) +
+        " · " + h.pageCount + " hal" + (h.quality ? " · " + h.quality : "");
+      const del = iconBtn("✕", "Hapus dari riwayat", () => {
+        const l = loadHistory();
+        l.splice(i, 1);
+        saveHistoryList(l);
+        renderHistory();
+      });
+      del.classList.add("h-del");
+      li.appendChild(nm); li.appendChild(meta); li.appendChild(del);
+      historyList.appendChild(li);
+    });
+  }
+  function addHistory(entry) {
+    saveHistoryList(U.pushHistory(loadHistory(), entry));
+    renderHistory();
+  }
+  historyClearBtn.addEventListener("click", () => {
+    if (!loadHistory().length) return;
+    if (confirm("Hapus semua riwayat?")) { saveHistoryList([]); renderHistory(); }
+  });
+  renderHistory();
+
+  /* ---------- fitur: pengaturan tersimpan ---------- */
+
+  const SET_KEY = "pdftools-settings-v1";
+  function saveSettings() {
+    try {
+      localStorage.setItem(SET_KEY, JSON.stringify({
+        quality: selectedQuality(),
+        optimize: optimizeCheck.checked,
+        pageNum: pageNumCheck.checked,
+        pageNumPos: pageNumPos.value,
+      }));
+    } catch (e) {}
+  }
+  (function restoreSettings() {
+    let s = null;
+    try { s = JSON.parse(localStorage.getItem(SET_KEY)); } catch (e) {}
+    if (!s || typeof s !== "object") return;
+    if (s.quality) {
+      const r = document.querySelector('input[name="quality"][value="' + s.quality + '"]');
+      if (r) { r.checked = true; qualityNote.hidden = s.quality === "asli"; }
+    }
+    if (typeof s.optimize === "boolean") optimizeCheck.checked = s.optimize;
+    if (typeof s.pageNum === "boolean") pageNumCheck.checked = s.pageNum;
+    if (s.pageNumPos === "center" || s.pageNumPos === "right") pageNumPos.value = s.pageNumPos;
+  })();
+  document.querySelectorAll('input[name="quality"]').forEach((el) => {
+    el.addEventListener("change", () => { clearPresetActive(); saveSettings(); });
+  });
+  optimizeCheck.addEventListener("change", () => { clearPresetActive(); saveSettings(); });
+  pageNumCheck.addEventListener("change", saveSettings);
+  pageNumPos.addEventListener("change", saveSettings);
 
   if (!window.pdfjsLib || !window.PDFLib || !window.PdfUtil) {
     toast("Gagal memuat library (butuh internet untuk CDN).");
