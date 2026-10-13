@@ -50,6 +50,25 @@ body{margin:0;font-family:system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-s
 .movers{position:absolute;bottom:34px;left:6px;display:flex;gap:4px}
 .movers button{width:26px;height:26px;border-radius:7px;border:1px solid var(--line);background:rgba(255,255,255,.94);font-size:.85rem;cursor:pointer;line-height:1;padding:0}
 
+/* ---- daftar file (tampilan utama) ---- */
+.file-list{display:flex;flex-direction:column;gap:10px}
+.file-card{background:var(--card);border:2px solid var(--line);border-radius:10px;overflow:hidden;transition:border-color .12s}
+.file-card.dragging{opacity:.4}
+.file-card.drop-target{outline:3px dashed var(--accent);outline-offset:-3px}
+.file-head{display:flex;align-items:center;gap:10px;padding:10px 12px;cursor:pointer;user-select:none}
+.file-head:hover{background:#f8fafc}
+.drag-handle{color:#9aa5b5;font-size:1.05rem;cursor:grab;letter-spacing:1px;flex:none;user-select:none}
+.file-info{flex:1;min-width:0}
+.file-name{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.file-sub{font-size:.78rem;color:var(--muted);margin-top:2px}
+.file-movers{display:flex;gap:4px;flex:none}
+.icon-btn{min-width:30px;height:30px;border-radius:8px;border:1px solid var(--line);background:#fff;font-size:.9rem;cursor:pointer;line-height:1;padding:0 6px}
+.icon-btn:hover{border-color:#9fb4d8}
+.expand-ind{color:var(--muted);font-size:1rem;flex:none;width:20px;text-align:center}
+.file-remove{color:var(--danger);border-color:#f0c9c9}
+.file-pages{border-top:1px solid var(--line);padding:0 12px 12px}
+.file-pages .grid{margin-top:12px}
+
 .empty-hint{text-align:center;color:var(--muted);margin:26px 0}
 
 .actionbar{text-align:center;margin:26px 0 8px}

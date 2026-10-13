@@ -93,3 +93,43 @@ test("campuran PDF + gambar dalam satu hasil", async () => {
   assert.equal(out.getPageCount(), 2);
   assert.deepEqual(pageSizes(out), [[1, 1], [200, 200]]);
 });
+
+// Replika collectChosen() dari app.js: file berurutan -> halaman included per file.
+function collectChosen(files, pages) {
+  const out = [];
+  for (const f of files)
+    for (const p of pages)
+      if (p.fileUid === f.uid && p.included) out.push(p);
+  return out;
+}
+
+test("urutan gabung mengikuti urutan file (file B digeser ke atas)", async () => {
+  const a = await makePdf([[100, 100], [200, 200]]);
+  const b = await makePdf([[300, 300]]);
+  const aBytes = await a.save(), bBytes = await b.save();
+  const pages = [
+    { kind: "pdf", fileUid: "A", pdfBytes: aBytes, pageNum: 1, included: true },
+    { kind: "pdf", fileUid: "A", pdfBytes: aBytes, pageNum: 2, included: true },
+    { kind: "pdf", fileUid: "B", pdfBytes: bBytes, pageNum: 1, included: true },
+  ];
+  const filesReordered = [{ uid: "B" }, { uid: "A" }]; // user geser B ke atas
+  const out = await buildPdf(collectChosen(filesReordered, pages));
+  assert.equal(out.getPageCount(), 3);
+  assert.deepEqual(pageSizes(out), [[300, 300], [100, 100], [200, 200]]);
+});
+
+test("exclude per halaman + gambar dihitung 1 file = 1 halaman", async () => {
+  const a = await makePdf([[100, 100], [200, 200], [300, 300]]);
+  const aBytes = await a.save();
+  const dataUrl = "data:image/jpeg;base64," + JPG_1x1;
+  const files = [{ uid: "IMG" }, { uid: "A" }];
+  const pages = [
+    { kind: "img", fileUid: "IMG", imgDataUrl: dataUrl, included: true },
+    { kind: "pdf", fileUid: "A", pdfBytes: aBytes, pageNum: 1, included: true },
+    { kind: "pdf", fileUid: "A", pdfBytes: aBytes, pageNum: 2, included: false },
+    { kind: "pdf", fileUid: "A", pdfBytes: aBytes, pageNum: 3, included: true },
+  ];
+  const out = await buildPdf(collectChosen(files, pages));
+  assert.equal(out.getPageCount(), 3);
+  assert.deepEqual(pageSizes(out), [[1, 1], [100, 100], [300, 300]]);
+});
