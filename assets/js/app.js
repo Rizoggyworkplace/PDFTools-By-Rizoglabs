@@ -258,6 +258,11 @@
       const grip = document.createElement("span");
       grip.className = "drag-handle"; grip.textContent = "⋮⋮"; grip.title = "Seret untuk pindah urutan";
 
+      const kind = document.createElement("span");
+      const isImg = fps.length > 0 && fps[0].kind === "img";
+      kind.className = "file-kind " + (isImg ? "kind-img" : "kind-pdf");
+      kind.textContent = isImg ? "GAMBAR" : "PDF";
+
       const info = document.createElement("div");
       info.className = "file-info";
       const nm = document.createElement("div");
@@ -283,7 +288,7 @@
       });
       rm.classList.add("file-remove");
 
-      head.appendChild(grip); head.appendChild(info); head.appendChild(movers);
+      head.appendChild(grip); head.appendChild(kind); head.appendChild(info); head.appendChild(movers);
       head.appendChild(exp); head.appendChild(rm);
       card.appendChild(head);
 
