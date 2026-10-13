@@ -8,15 +8,18 @@
       "https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js";
   }
 
+  const U = window.PdfUtil; // assets/js/pdfutil.js (util murni, tanpa DOM)
+
   const $ = (id) => document.getElementById(id);
   const dropzone = $("dropzone"), fileInput = $("fileInput"), pickBtn = $("pickBtn");
   const fileList = $("fileList"), toolbar = $("toolbar"), actionBar = $("actionBar");
   const emptyHint = $("emptyHint"), statText = $("statText"), mergeBtn = $("mergeBtn");
   const mergeCount = $("mergeCount"), toastEl = $("toast");
   const fileNameInput = $("fileNameInput"), optimizeCheck = $("optimizeCheck");
-  const resultInfo = $("resultInfo");
+  const resultInfo = $("resultInfo"), qualityNote = $("qualityNote");
+  const pageNumCheck = $("pageNumCheck"), pageNumPos = $("pageNumPos");
 
-  let pages = [];       // {uid,fileUid,fileName,kind:'pdf'|'img',pageNum,pdfBytes,imgDataUrl,thumbUrl,included}
+  let pages = [];       // {uid,fileUid,fileName,kind:'pdf'|'img',pageNum,pdfBytes,imgDataUrl,thumbUrl,included,rotation}
   let files = [];       // {uid,name,expanded} — urutan array = urutan gabung
   let uidSeq = 0;
   const uid = () => "p" + (++uidSeq) + "_" + Date.now().toString(36);
@@ -36,7 +39,21 @@
     return b;
   }
 
-  /* ---------- input ---------- */
+  /* ---------- tab Gabung / Pisah ---------- */
+
+  const tabMerge = $("tabMerge"), tabSplit = $("tabSplit");
+  const paneMerge = $("paneMerge"), paneSplit = $("paneSplit");
+  tabMerge.addEventListener("click", () => switchTab(true));
+  tabSplit.addEventListener("click", () => switchTab(false));
+  function switchTab(merge) {
+    tabMerge.classList.toggle("active", merge);
+    tabSplit.classList.toggle("active", !merge);
+    paneMerge.hidden = !merge;
+    paneSplit.hidden = merge;
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  /* ---------- input (mode gabung) ---------- */
 
   pickBtn.addEventListener("click", (e) => { e.stopPropagation(); fileInput.click(); });
   dropzone.addEventListener("click", () => fileInput.click());
@@ -83,7 +100,7 @@
       pages.push({
         uid: uid(), fileUid, fileName, kind: "pdf",
         pageNum: n, pdfBytes: bytes, thumbUrl: canvas.toDataURL("image/jpeg", 0.72),
-        included: true,
+        included: true, rotation: 0,
       });
       page.cleanup();
     }
@@ -114,7 +131,7 @@
     pages.push({
       uid: uid(), fileUid, fileName: file.name, kind: "img",
       pageNum: 1, imgDataUrl: dataUrl, thumbUrl: tc.toDataURL("image/jpeg", 0.72),
-      included: true,
+      included: true, rotation: 0,
     });
   }
 
@@ -132,6 +149,28 @@
       img.onerror = (e) => { URL.revokeObjectURL(url); rej(e); };
       img.src = url;
     });
+  }
+  function loadImageFromUrl(url) {
+    return new Promise((res, rej) => {
+      const img = new Image();
+      img.onload = () => res(img);
+      img.onerror = rej;
+      img.src = url;
+    });
+  }
+
+  // Putar sumber gambar (canvas/ImageBitmap) sebesar deg searah jarum jam.
+  function drawRotated(src, srcW, srcH, deg, quality) {
+    const swap = deg === 90 || deg === 270;
+    const c = document.createElement("canvas");
+    c.width = swap ? srcH : srcW;
+    c.height = swap ? srcW : srcH;
+    const ctx = c.getContext("2d");
+    ctx.fillStyle = "#ffffff"; ctx.fillRect(0, 0, c.width, c.height);
+    ctx.translate(c.width / 2, c.height / 2);
+    ctx.rotate((deg * Math.PI) / 180);
+    ctx.drawImage(src, -srcW / 2, -srcH / 2, srcW, srcH);
+    return c.toDataURL("image/jpeg", quality);
   }
 
   /* ---------- model ---------- */
@@ -285,24 +324,6 @@
     fileList.querySelectorAll(".drop-target").forEach((el) => el.classList.remove("drop-target"));
   }
 
-  /* ---------- nama file hasil & format ukuran ---------- */
-
-  // Bersihkan nama file dari karakter ilegal; pastikan berekstensi .pdf.
-  function resolveFileName(raw) {
-    let s = String(raw == null ? "" : raw).trim();
-    s = s.replace(/[<>:"/\\|?*\x00-\x1f]/g, ""); // karakter ilegal nama file
-    s = s.replace(/\.+$/g, "");                  // titik di ujung
-    if (!s) s = "gabungan";
-    if (/\.pdf$/i.test(s)) return s.length <= 120 ? s : s.slice(0, 116) + ".pdf";
-    return s.slice(0, 116) + ".pdf";
-  }
-
-  function fmtSize(bytes) {
-    if (bytes >= 1048576) return (bytes / 1048576).toFixed(2).replace(".", ",") + " MB";
-    if (bytes >= 1024) return Math.round(bytes / 1024) + " KB";
-    return bytes + " B";
-  }
-
   /* ---------- render: kartu halaman (di dalam file yang di-expand) ---------- */
 
   function pageCard(p) {
@@ -320,20 +341,28 @@
     badge.className = "badge-ex"; badge.textContent = "lewati";
     card.appendChild(badge);
 
+    const rotBadge = document.createElement("div");
+    rotBadge.className = "rot-badge" + (p.rotation ? " on" : "");
+    rotBadge.textContent = p.rotation ? "⟳" + p.rotation + "°" : "";
+    card.appendChild(rotBadge);
+
     const check = document.createElement("div");
     check.className = "check"; check.textContent = "✓";
     card.appendChild(check);
 
     const movers = document.createElement("div");
     movers.className = "movers";
-    const bl = iconBtn("◀", "Geser kiri", () => movePageWithinFile(p.uid, -1));
-    const br = iconBtn("▶", "Geser kanan", () => movePageWithinFile(p.uid, 1));
-    movers.appendChild(bl); movers.appendChild(br);
+    movers.appendChild(iconBtn("◀", "Geser kiri", () => movePageWithinFile(p.uid, -1)));
+    movers.appendChild(iconBtn("▶", "Geser kanan", () => movePageWithinFile(p.uid, 1)));
+    movers.appendChild(iconBtn("⟳", "Putar 90°", () => {
+      p.rotation = ((p.rotation || 0) + 90) % 360;
+      render();
+    }));
     card.appendChild(movers);
 
     const meta = document.createElement("div");
     meta.className = "page-meta";
-    meta.textContent = p.kind === "pdf" ? "Hal " + p.pageNum : "gambar";
+    meta.textContent = (p.kind === "pdf" ? "Hal " + p.pageNum : "gambar") + (p.rotation ? " · ⟳" + p.rotation + "°" : "");
     card.appendChild(meta);
 
     card.addEventListener("click", (e) => { e.stopPropagation(); p.included = !p.included; render(); });
@@ -364,29 +393,64 @@
     if (confirm("Hapus semua file dan halaman?")) { pages = []; files = []; render(); }
   });
 
+  /* ---------- kualitas hasil ---------- */
+
+  const LOSSY = {
+    tinggi: { dpi: 200, q: 0.85, maxImg: 2200 },
+    sedang: { dpi: 150, q: 0.70, maxImg: 1600 },
+    rendah: { dpi: 96,  q: 0.55, maxImg: 1100 },
+  };
+  function selectedQuality() {
+    const el = document.querySelector('input[name="quality"]:checked');
+    return el ? el.value : "asli";
+  }
+  document.querySelectorAll('input[name="quality"]').forEach((el) => {
+    el.addEventListener("change", () => {
+      qualityNote.hidden = selectedQuality() === "asli";
+    });
+  });
+
   /* ---------- merge & download ---------- */
 
   mergeBtn.addEventListener("click", async () => {
     const chosen = collectChosen();
     if (!chosen.length) { toast("Pilih dulu halamannya"); return; }
+    const quality = selectedQuality();
     mergeBtn.disabled = true;
     const oldLabel = mergeBtn.innerHTML;
-    mergeBtn.innerHTML = "⏳ Menggabung…";
+    mergeBtn.innerHTML = quality === "asli" ? "⏳ Menggabung…" : "⏳ Meraster halaman…";
     resultInfo.hidden = true;
     try {
-      const fileName = resolveFileName(fileNameInput.value);
+      const fileName = U.resolveFileName(fileNameInput.value);
       const optimize = optimizeCheck.checked;
-      const { bytes, plainBytes } = await buildPdf(chosen, optimize);
+      const pageNumbers = pageNumCheck.checked;
+      const pageNumPos = pageNumPos.value;
+      let bytes, plainBytes = null, srcBytes = 0;
+
+      if (quality === "asli") {
+        // Halaman gambar yang diputar di-bake dulu via canvas (PDF pakai rotasi native).
+        const prepared = await prepareChosen(chosen);
+        const r = await U.buildPdf(PDFLib, prepared, { optimize: optimize, pageNumbers: pageNumbers, pageNumPos: pageNumPos });
+        bytes = r.bytes; plainBytes = r.plainBytes;
+      } else {
+        const preset = LOSSY[quality];
+        const r = await buildLossyPdf(chosen, preset, pageNumbers, pageNumPos);
+        bytes = r.bytes;
+        srcBytes = chosen.reduce((s, p) => s + (p.pdfBytes ? p.pdfBytes.length : Math.round((p.imgDataUrl.length * 3) / 4)), 0);
+      }
+
       const blob = new Blob([bytes], { type: "application/pdf" });
       const a = document.createElement("a");
       a.href = URL.createObjectURL(blob);
       a.download = fileName;
       document.body.appendChild(a); a.click(); a.remove();
       setTimeout(() => URL.revokeObjectURL(a.href), 4000);
-      let info = "Ukuran hasil: " + fmtSize(bytes.length);
-      if (plainBytes && plainBytes.length > bytes.length) {
-        const hemat = Math.round((1 - bytes.length / plainBytes.length) * 100);
-        info += " (tanpa optimasi: " + fmtSize(plainBytes.length) + " · hemat " + hemat + "%)";
+
+      let info = "Ukuran hasil: " + U.fmtSize(bytes.length);
+      const base = plainBytes || (srcBytes > 0 ? { length: srcBytes } : null);
+      if (base && base.length > bytes.length) {
+        const hemat = Math.round((1 - bytes.length / base.length) * 100);
+        info += " (sebelumnya ±" + U.fmtSize(base.length) + " · hemat " + hemat + "%)";
       }
       resultInfo.textContent = info;
       resultInfo.hidden = false;
@@ -399,34 +463,165 @@
     mergeBtn.disabled = false;
   });
 
-  // optimize=true: simpan dengan object streams -- lossless & struktural
-  // (tidak recompress/downscale gambar, tidak mengubah teks).
-  // Mengembalikan bytes final + versi tanpa optimasi untuk perbandingan ukuran.
-  async function buildPdf(chosen, optimize) {
-    const out = await PDFLib.PDFDocument.create();
-    const cache = new Map(); // fileUid -> PDFLib.PDFDocument
+  // Untuk mode "Asli": rotasi halaman gambar di-bake via canvas (q=1.0),
+  // halaman PDF memakai rotasi native pdf-lib di PdfUtil.buildPdf.
+  async function prepareChosen(chosen) {
+    const out = [];
     for (const p of chosen) {
-      if (p.kind === "pdf") {
-        let src = cache.get(p.fileUid);
-        if (!src) { src = await PDFLib.PDFDocument.load(p.pdfBytes); cache.set(p.fileUid, src); }
-        const [cp] = await out.copyPages(src, [p.pageNum - 1]);
-        out.addPage(cp);
+      if (p.kind === "img" && p.rotation) {
+        const img = await loadImageFromUrl(p.imgDataUrl);
+        const dataUrl = drawRotated(img, img.naturalWidth, img.naturalHeight, p.rotation, 1.0);
+        out.push(Object.assign({}, p, { imgDataUrl: dataUrl, rotation: 0 }));
       } else {
-        const jpg = await out.embedJpg(p.imgDataUrl);
-        const pg = out.addPage([jpg.width, jpg.height]);
-        pg.drawImage(jpg, { x: 0, y: 0, width: jpg.width, height: jpg.height });
+        out.push(p);
       }
     }
-    if (optimize) {
-      const plainBytes = await out.save({ useObjectStreams: false });
-      const bytes = await out.save({ useObjectStreams: true });
-      return { bytes, plainBytes };
-    }
-    return { bytes: await out.save({ useObjectStreams: false }), plainBytes: null };
+    return out;
   }
 
-  
-  if (!window.pdfjsLib || !window.PDFLib) {
+  // Mode lossy: tiap halaman di-raster via pdf.js/canvas -> JPEG, lalu dirakit ulang.
+  async function buildLossyPdf(chosen, preset, pageNumbers, pageNumPos) {
+    const out = await PDFLib.PDFDocument.create();
+    for (const p of chosen) {
+      const dataUrl = await rasterizePage(p, preset);
+      const jpg = await out.embedJpg(dataUrl);
+      const pg = out.addPage([jpg.width, jpg.height]);
+      pg.drawImage(jpg, { x: 0, y: 0, width: jpg.width, height: jpg.height });
+    }
+    if (pageNumbers) await U.applyPageNumbers(PDFLib, out, pageNumPos);
+    const bytes = await out.save({ useObjectStreams: true });
+    return { bytes: bytes };
+  }
+
+  async function rasterizePage(p, preset) {
+    let canvas;
+    if (p.kind === "pdf") {
+      const doc = await pdfjsLib.getDocument({ data: p.pdfBytes.slice() }).promise;
+      try {
+        const page = await doc.getPage(p.pageNum);
+        const vp = page.getViewport({ scale: preset.dpi / 72 });
+        canvas = document.createElement("canvas");
+        canvas.width = Math.ceil(vp.width); canvas.height = Math.ceil(vp.height);
+        const ctx = canvas.getContext("2d");
+        ctx.fillStyle = "#ffffff"; ctx.fillRect(0, 0, canvas.width, canvas.height);
+        await page.render({ canvasContext: ctx, viewport: vp }).promise;
+        page.cleanup();
+      } finally {
+        doc.destroy();
+      }
+    } else {
+      const img = await loadImageFromUrl(p.imgDataUrl);
+      const s = Math.min(1, preset.maxImg / Math.max(img.naturalWidth, img.naturalHeight));
+      canvas = document.createElement("canvas");
+      canvas.width = Math.max(1, Math.round(img.naturalWidth * s));
+      canvas.height = Math.max(1, Math.round(img.naturalHeight * s));
+      const ctx = canvas.getContext("2d");
+      ctx.fillStyle = "#ffffff"; ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+    }
+    if (p.rotation) {
+      return drawRotated(canvas, canvas.width, canvas.height, p.rotation, preset.q);
+    }
+    return canvas.toDataURL("image/jpeg", preset.q);
+  }
+
+  /* ---------- mode pisah ---------- */
+
+  const splitDropzone = $("splitDropzone"), splitFileInput = $("splitFileInput");
+  const splitPickBtn = $("splitPickBtn"), splitWork = $("splitWork");
+  const splitFileName = $("splitFileName"), splitPageCount = $("splitPageCount");
+  const rangeInput = $("rangeInput"), everyNInput = $("everyNInput");
+  const splitBaseName = $("splitBaseName"), splitBtn = $("splitBtn");
+  const splitResultInfo = $("splitResultInfo");
+
+  let splitDoc = null; // {name, bytes, numPages}
+
+  splitPickBtn.addEventListener("click", (e) => { e.stopPropagation(); splitFileInput.click(); });
+  splitDropzone.addEventListener("click", () => splitFileInput.click());
+  splitFileInput.addEventListener("change", () => { loadSplitFile(splitFileInput.files[0]); splitFileInput.value = ""; });
+  ["dragenter", "dragover"].forEach((ev) =>
+    splitDropzone.addEventListener(ev, (e) => { e.preventDefault(); splitDropzone.classList.add("dragover"); }));
+  ["dragleave", "drop"].forEach((ev) =>
+    splitDropzone.addEventListener(ev, (e) => { e.preventDefault(); splitDropzone.classList.remove("dragover"); }));
+  splitDropzone.addEventListener("drop", (e) => loadSplitFile(e.dataTransfer.files[0]));
+
+  async function loadSplitFile(file) {
+    if (!file) return;
+    if (!(/pdf$/i.test(file.type) || /\.pdf$/i.test(file.name))) {
+      toast("Pilih file PDF");
+      return;
+    }
+    try {
+      const buf = await file.arrayBuffer();
+      const bytes = new Uint8Array(buf);
+      const doc = await pdfjsLib.getDocument({ data: bytes.slice() }).promise;
+      const n = doc.numPages;
+      doc.destroy();
+      splitDoc = { name: file.name, bytes: bytes, numPages: n };
+      splitFileName.textContent = file.name;
+      splitPageCount.textContent = n + " halaman";
+      splitBaseName.value = file.name.replace(/\.pdf$/i, "") || "dokumen";
+      splitWork.hidden = false;
+      splitResultInfo.hidden = true;
+      toast("PDF dimuat: " + n + " halaman");
+    } catch (err) {
+      console.error(err);
+      toast("Gagal baca PDF");
+    }
+  }
+
+  function splitMode() {
+    const el = document.querySelector('input[name="splitMode"]:checked');
+    return el ? el.value : "range";
+  }
+
+  splitBtn.addEventListener("click", async () => {
+    if (!splitDoc) { toast("Pilih dulu file PDF-nya"); return; }
+    if (!window.JSZip) { toast("Gagal memuat JSZip (butuh internet untuk CDN)."); return; }
+    const mode = splitMode();
+    let ranges;
+    try {
+      if (mode === "range") ranges = U.parseRanges(rangeInput.value, splitDoc.numPages);
+      else if (mode === "every") ranges = U.chunkEveryN(splitDoc.numPages, everyNInput.value);
+      else ranges = U.chunkEveryN(splitDoc.numPages, 1);
+    } catch (err) {
+      toast(err.message);
+      return;
+    }
+    splitBtn.disabled = true;
+    const oldLabel = splitBtn.innerHTML;
+    splitBtn.innerHTML = "⏳ Memisah…";
+    splitResultInfo.hidden = true;
+    try {
+      const parts = await U.buildSplit(PDFLib, splitDoc.bytes, ranges, { optimize: true });
+      const zip = new JSZip();
+      const base = splitBaseName.value.trim() || "dokumen";
+      let total = 0;
+      for (const part of parts) {
+        const name = U.splitName(base, part.label);
+        zip.file(name, part.bytes);
+        total += part.bytes.length;
+      }
+      const zipName = U.resolveFileName(base + "_pisah").replace(/\.pdf$/i, "") + ".zip";
+      const blob = await zip.generateAsync({ type: "blob" });
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = zipName;
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+      splitResultInfo.textContent = parts.length + " file dibuat (" +
+        parts.map((x) => x.label).join(", ") + ") · total " + U.fmtSize(total);
+      splitResultInfo.hidden = false;
+      toast("Berhasil! " + parts.length + " file dalam ZIP.");
+    } catch (err) {
+      console.error(err);
+      toast("Gagal memisah: " + (err && err.message ? err.message : err));
+    }
+    splitBtn.innerHTML = oldLabel;
+    splitBtn.disabled = false;
+  });
+
+  if (!window.pdfjsLib || !window.PDFLib || !window.PdfUtil) {
     toast("Gagal memuat library (butuh internet untuk CDN).");
   }
 })();

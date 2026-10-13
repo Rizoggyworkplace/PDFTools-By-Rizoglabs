@@ -1,11 +1,15 @@
-/* Test logika merge PDF Tools (jalan di node, pakai pdf-lib).
- * Teknik yang dites = teknik yang dipakai assets/js/app.js::buildPdf
- * dan assets/js/app.js::resolveFileName.
+/* Test logika PDF Tools (jalan di node).
+ * Menguji kode ASLI di assets/js/pdfutil.js (bukan replika).
  * Jalankan: NODE_PATH=/tmp/pdftest/node_modules node --test tests/merge.test.mjs
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { createRequire } from "node:module";
 import { PDFDocument } from "pdf-lib";
+import pdfLib from "pdf-lib"; // namespace lengkap utk PdfUtil
+
+const require = createRequire(import.meta.url);
+const U = require("../assets/js/pdfutil.js");
 
 // JPEG 1x1 piksel valid (untuk tes gambar -> halaman)
 const JPG_1x1 = "/9j/4AAQSkZJRgABAQEASABIAAD/2wBDAP//////////////////////////////////////////////////////////////////////////////////////2wBDAf//////////////////////////////////////////////////////////////////////////////////////wAARCAABAAEDASIAAhEBAxEB/8QAFAABAAAAAAAAAAAAAAAAAAAACf/EABQQAQAAAAAAAAAAAAAAAAAAAAD/2gAIAQEAAD8AK//Z";
@@ -25,41 +29,6 @@ function pageSizes(doc) {
   return out;
 }
 
-// Replika buildPdf() dari app.js: gabung halaman terpilih sesuai urutan.
-// Mengembalikan { bytes, plainBytes } persis seperti app.js.
-async function buildPdf(chosen, optimize) {
-  const out = await PDFDocument.create();
-  const cache = new Map();
-  for (const p of chosen) {
-    if (p.kind === "pdf") {
-      let src = cache.get(p.fileUid);
-      if (!src) { src = await PDFDocument.load(p.pdfBytes); cache.set(p.fileUid, src); }
-      const [cp] = await out.copyPages(src, [p.pageNum - 1]);
-      out.addPage(cp);
-    } else {
-      const jpg = await out.embedJpg(p.imgDataUrl);
-      const pg = out.addPage([jpg.width, jpg.height]);
-      pg.drawImage(jpg, { x: 0, y: 0, width: jpg.width, height: jpg.height });
-    }
-  }
-  if (optimize) {
-    const plainBytes = await out.save({ useObjectStreams: false });
-    const bytes = await out.save({ useObjectStreams: true });
-    return { bytes, plainBytes };
-  }
-  return { bytes: await out.save({ useObjectStreams: false }), plainBytes: null };
-}
-
-// Replika resolveFileName() dari app.js
-function resolveFileName(raw) {
-  let s = String(raw == null ? "" : raw).trim();
-  s = s.replace(/[<>:"/\\|?*\x00-\x1f]/g, "");
-  s = s.replace(/\.+$/g, "");
-  if (!s) s = "gabungan";
-  if (/\.pdf$/i.test(s)) return s.length <= 120 ? s : s.slice(0, 116) + ".pdf";
-  return s.slice(0, 116) + ".pdf";
-}
-
 // Replika collectChosen() dari app.js: file berurutan -> halaman included per file.
 function collectChosen(files, pages) {
   const out = [];
@@ -68,6 +37,8 @@ function collectChosen(files, pages) {
       if (p.fileUid === f.uid && p.included) out.push(p);
   return out;
 }
+
+/* ---------- merge dasar ---------- */
 
 test("gabung 2 PDF utuh (3 + 2 halaman = 5)", async () => {
   const a = await makePdf([[100, 100], [200, 200], [300, 300]]);
@@ -80,7 +51,7 @@ test("gabung 2 PDF utuh (3 + 2 halaman = 5)", async () => {
     { kind: "pdf", fileUid: "B", pdfBytes: bBytes, pageNum: 1 },
     { kind: "pdf", fileUid: "B", pdfBytes: bBytes, pageNum: 2 },
   ];
-  const { bytes } = await buildPdf(chosen, true);
+  const { bytes } = await U.buildPdf(pdfLib, chosen, { optimize: true });
   const out = await PDFDocument.load(bytes);
   assert.equal(out.getPageCount(), 5);
   assert.deepEqual(pageSizes(out), [[100, 100], [200, 200], [300, 300], [400, 400], [500, 500]]);
@@ -95,7 +66,7 @@ test("pilih subset halaman + urutan campur antar file", async () => {
     { kind: "pdf", fileUid: "B", pdfBytes: bBytes, pageNum: 2 }, // 500x500
     { kind: "pdf", fileUid: "A", pdfBytes: aBytes, pageNum: 3 }, // 300x300
   ];
-  const { bytes } = await buildPdf(chosen, true);
+  const { bytes } = await U.buildPdf(pdfLib, chosen, { optimize: true });
   const out = await PDFDocument.load(bytes);
   assert.equal(out.getPageCount(), 3);
   assert.deepEqual(pageSizes(out), [[100, 100], [500, 500], [300, 300]]);
@@ -103,7 +74,7 @@ test("pilih subset halaman + urutan campur antar file", async () => {
 
 test("gambar (JPEG) menjadi satu halaman penuh", async () => {
   const dataUrl = "data:image/jpeg;base64," + JPG_1x1;
-  const { bytes } = await buildPdf([{ kind: "img", imgDataUrl: dataUrl }], true);
+  const { bytes } = await U.buildPdf(pdfLib, [{ kind: "img", imgDataUrl: dataUrl }], { optimize: true });
   const out = await PDFDocument.load(bytes);
   assert.equal(out.getPageCount(), 1);
   const [w, h] = pageSizes(out)[0];
@@ -119,7 +90,7 @@ test("campuran PDF + gambar dalam satu hasil", async () => {
     { kind: "img", fileUid: "X", imgDataUrl: dataUrl, included: true },
     { kind: "pdf", fileUid: "X", pdfBytes: aBytes, pageNum: 2, included: true },
   ];
-  const { bytes } = await buildPdf(collectChosen(files, pages), true);
+  const { bytes } = await U.buildPdf(pdfLib, collectChosen(files, pages), { optimize: true });
   const out = await PDFDocument.load(bytes);
   assert.equal(out.getPageCount(), 2);
   assert.deepEqual(pageSizes(out), [[1, 1], [200, 200]]);
@@ -135,7 +106,7 @@ test("urutan gabung mengikuti urutan file (file B digeser ke atas)", async () =>
     { kind: "pdf", fileUid: "B", pdfBytes: bBytes, pageNum: 1, included: true },
   ];
   const filesReordered = [{ uid: "B" }, { uid: "A" }]; // user geser B ke atas
-  const { bytes } = await buildPdf(collectChosen(filesReordered, pages), true);
+  const { bytes } = await U.buildPdf(pdfLib, collectChosen(filesReordered, pages), { optimize: true });
   const out = await PDFDocument.load(bytes);
   assert.equal(out.getPageCount(), 3);
   assert.deepEqual(pageSizes(out), [[300, 300], [100, 100], [200, 200]]);
@@ -152,33 +123,33 @@ test("exclude per halaman + gambar dihitung 1 file = 1 halaman", async () => {
     { kind: "pdf", fileUid: "A", pdfBytes: aBytes, pageNum: 2, included: false },
     { kind: "pdf", fileUid: "A", pdfBytes: aBytes, pageNum: 3, included: true },
   ];
-  const { bytes } = await buildPdf(collectChosen(files, pages), true);
+  const { bytes } = await U.buildPdf(pdfLib, collectChosen(files, pages), { optimize: true });
   const out = await PDFDocument.load(bytes);
   assert.equal(out.getPageCount(), 3);
   assert.deepEqual(pageSizes(out), [[1, 1], [100, 100], [300, 300]]);
 });
 
-/* ---------- fitur baru: nama file hasil ---------- */
+/* ---------- nama file hasil ---------- */
 
 test("resolveFileName: nama custom dipakai, .pdf ditambah otomatis", () => {
-  assert.equal(resolveFileName("laporan bulanan"), "laporan bulanan.pdf");
-  assert.equal(resolveFileName("laporan.pdf"), "laporan.pdf");
-  assert.equal(resolveFileName("LAPORAN.PDF"), "LAPORAN.PDF");
-  assert.equal(resolveFileName("  spasi  "), "spasi.pdf");
+  assert.equal(U.resolveFileName("laporan bulanan"), "laporan bulanan.pdf");
+  assert.equal(U.resolveFileName("laporan.pdf"), "laporan.pdf");
+  assert.equal(U.resolveFileName("LAPORAN.PDF"), "LAPORAN.PDF");
+  assert.equal(U.resolveFileName("  spasi  "), "spasi.pdf");
 });
 
 test("resolveFileName: sanitasi karakter ilegal & fallback default", () => {
-  assert.equal(resolveFileName('a/b:c*d?e"f<g>h|i.pdf'), "abcdefghi.pdf");
-  assert.equal(resolveFileName("laporan..."), "laporan.pdf");
-  assert.equal(resolveFileName(""), "gabungan.pdf");
-  assert.equal(resolveFileName("   "), "gabungan.pdf");
-  assert.equal(resolveFileName(null), "gabungan.pdf");
-  assert.equal(resolveFileName("///"), "gabungan.pdf");
-  const long = resolveFileName("x".repeat(200));
+  assert.equal(U.resolveFileName('a/b:c*d?e"f<g>h|i.pdf'), "abcdefghi.pdf");
+  assert.equal(U.resolveFileName("laporan..."), "laporan.pdf");
+  assert.equal(U.resolveFileName(""), "gabungan.pdf");
+  assert.equal(U.resolveFileName("   "), "gabungan.pdf");
+  assert.equal(U.resolveFileName(null), "gabungan.pdf");
+  assert.equal(U.resolveFileName("///"), "gabungan.pdf");
+  const long = U.resolveFileName("x".repeat(200));
   assert.ok(long.length <= 120 && long.endsWith(".pdf"));
 });
 
-/* ---------- fitur baru: optimasi ukuran (lossless) ---------- */
+/* ---------- optimasi ukuran (lossless) ---------- */
 
 test("optimasi: hasil valid, halaman lengkap, ukuran <= tanpa optimasi", async () => {
   const a = await makePdf([[100, 100], [200, 200], [300, 300]]);
@@ -192,7 +163,7 @@ test("optimasi: hasil valid, halaman lengkap, ukuran <= tanpa optimasi", async (
     { kind: "pdf", fileUid: "B", pdfBytes: bBytes, pageNum: 1 },
     { kind: "img", imgDataUrl: dataUrl },
   ];
-  const { bytes, plainBytes } = await buildPdf(chosen, true);
+  const { bytes, plainBytes } = await U.buildPdf(pdfLib, chosen, { optimize: true });
   const out = await PDFDocument.load(bytes); // harus tetap valid
   assert.equal(out.getPageCount(), 5);
   assert.ok(plainBytes && plainBytes.length > 0);
@@ -209,9 +180,106 @@ test("tanpa optimasi: plainBytes null & hasil tetap valid", async () => {
     { kind: "pdf", fileUid: "A", pdfBytes: aBytes, pageNum: 1 },
     { kind: "pdf", fileUid: "A", pdfBytes: aBytes, pageNum: 2 },
   ];
-  const { bytes, plainBytes } = await buildPdf(chosen, false);
+  const { bytes, plainBytes } = await U.buildPdf(pdfLib, chosen, { optimize: false });
   assert.equal(plainBytes, null);
   const out = await PDFDocument.load(bytes);
   assert.equal(out.getPageCount(), 2);
   assert.deepEqual(pageSizes(out), [[100, 100], [200, 200]]);
+});
+
+/* ---------- fitur baru: putar halaman ---------- */
+
+test("rotasi: halaman PDF diputar 90 derajat", async () => {
+  const a = await makePdf([[100, 200]]);
+  const aBytes = await a.save();
+  const chosen = [{ kind: "pdf", fileUid: "A", pdfBytes: aBytes, pageNum: 1, rotation: 90 }];
+  const { bytes } = await U.buildPdf(pdfLib, chosen, { optimize: false });
+  const out = await PDFDocument.load(bytes);
+  assert.equal(out.getPageCount(), 1);
+  assert.equal(out.getPage(0).getRotation().angle, 90);
+});
+
+test("rotasi: 0/180/270 & tanpa rotasi tetap normal", async () => {
+  const a = await makePdf([[100, 100], [100, 100], [100, 100], [100, 100]]);
+  const aBytes = await a.save();
+  const chosen = [0, 90, 180, 270].map((r, i) => (
+    { kind: "pdf", fileUid: "A", pdfBytes: aBytes, pageNum: i + 1, rotation: r }
+  ));
+  const { bytes } = await U.buildPdf(pdfLib, chosen, { optimize: false });
+  const out = await PDFDocument.load(bytes);
+  const angles = [0, 1, 2, 3].map((i) => out.getPage(i).getRotation().angle);
+  assert.deepEqual(angles, [0, 90, 180, 270]);
+});
+
+/* ---------- fitur baru: nomor halaman ---------- */
+
+test("nomor halaman: hasil valid & jumlah halaman benar (tengah & kanan)", async () => {
+  for (const pos of ["center", "right"]) {
+    const a = await makePdf([[200, 300], [400, 500], [100, 100]]);
+    const aBytes = await a.save();
+    const chosen = [1, 2, 3].map((n) => ({ kind: "pdf", fileUid: "A", pdfBytes: aBytes, pageNum: n }));
+    const { bytes } = await U.buildPdf(pdfLib, chosen, { optimize: true, pageNumbers: true, pageNumPos: pos });
+    const out = await PDFDocument.load(bytes);
+    assert.equal(out.getPageCount(), 3);
+    assert.deepEqual(pageSizes(out), [[200, 300], [400, 500], [100, 100]]);
+  }
+});
+
+test("nomor halaman: tanpa opsi -> tidak error & halaman utuh", async () => {
+  const a = await makePdf([[200, 300]]);
+  const aBytes = await a.save();
+  const { bytes } = await U.buildPdf(
+    pdfLib,
+    [{ kind: "pdf", fileUid: "A", pdfBytes: aBytes, pageNum: 1 }],
+    { optimize: false, pageNumbers: false }
+  );
+  const out = await PDFDocument.load(bytes);
+  assert.equal(out.getPageCount(), 1);
+});
+
+/* ---------- fitur baru: split ---------- */
+
+test("parseRanges: format valid", () => {
+  assert.deepEqual(U.parseRanges("1-5", 10), [[1, 5]]);
+  assert.deepEqual(U.parseRanges("1-5, 8, 10-12", 12), [[1, 5], [8, 8], [10, 12]]);
+  assert.deepEqual(U.parseRanges(" 3 , 1-2 ", 5), [[3, 3], [1, 2]]);
+  assert.deepEqual(U.parseRanges("5-3", 10), [[3, 5]]); // dibalik otomatis
+});
+
+test("parseRanges: format salah / di luar jangkauan -> error", () => {
+  assert.throws(() => U.parseRanges("", 10), /Rentang kosong/);
+  assert.throws(() => U.parseRanges("abc", 10), /Format salah/);
+  assert.throws(() => U.parseRanges("1--5", 10), /Format salah/);
+  assert.throws(() => U.parseRanges("0-3", 10), /di luar jangkauan/);
+  assert.throws(() => U.parseRanges("1-99", 10), /di luar jangkauan/);
+});
+
+test("chunkEveryN: bagi halaman per N", () => {
+  assert.deepEqual(U.chunkEveryN(10, 3), [[1, 3], [4, 6], [7, 9], [10, 10]]);
+  assert.deepEqual(U.chunkEveryN(5, 1), [[1, 1], [2, 2], [3, 3], [4, 4], [5, 5]]);
+  assert.deepEqual(U.chunkEveryN(4, 10), [[1, 4]]);
+  assert.throws(() => U.chunkEveryN(10, 0), />= 1/);
+});
+
+test("splitName: nama file bagian + sanitasi", () => {
+  assert.equal(U.splitName("dokumen", "1-5"), "dokumen_1-5.pdf");
+  assert.equal(U.splitName("dokumen.pdf", "3"), "dokumen_3.pdf");
+  assert.equal(U.splitName("a/b", "1"), "ab_1.pdf");
+  assert.equal(U.splitName("", "1-2"), "gabungan_1-2.pdf");
+});
+
+test("buildSplit: pecah PDF jadi beberapa file sesuai rentang", async () => {
+  const a = await makePdf([[100, 100], [200, 200], [300, 300], [400, 400], [500, 500]]);
+  const aBytes = await a.save();
+  const parts = await U.buildSplit(pdfLib, aBytes, [[1, 2], [3, 3], [4, 5]], { optimize: true });
+  assert.equal(parts.length, 3);
+  assert.deepEqual(parts.map((x) => x.label), ["1-2", "3", "4-5"]);
+  const counts = [];
+  for (const part of parts) {
+    const d = await PDFDocument.load(part.bytes);
+    counts.push(d.getPageCount());
+  }
+  assert.deepEqual(counts, [2, 1, 2]);
+  const d0 = await PDFDocument.load(parts[0].bytes);
+  assert.deepEqual(pageSizes(d0), [[100, 100], [200, 200]]);
 });

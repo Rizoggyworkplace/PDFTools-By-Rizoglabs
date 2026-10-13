@@ -3,20 +3,30 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>PDF Tools — Gabung PDF Gratis, 100% di Browser</title>
-<meta name="description" content="Gabungkan banyak PDF dan gambar menjadi satu PDF. Semua proses di browser, file tidak pernah di-upload.">
+<title>PDF Tools — Gabung & Pisah PDF Gratis, 100% di Browser</title>
+<meta name="description" content="Gabungkan atau pisahkan PDF dan gambar. Semua proses di browser, file tidak pernah di-upload.">
 <link rel="stylesheet" href="assets/css/style.css">
 <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+<script src="assets/js/pdfutil.js"></script>
 </head>
 <body>
 
 <header class="topbar">
   <div class="brand">📄 <strong>PDF Tools</strong></div>
-  <div class="tagline">Gabung PDF &amp; gambar — 100% di browser, tanpa upload</div>
+  <div class="tagline">PDF &amp; gambar — 100% di browser, tanpa upload</div>
 </header>
 
+<nav class="tabs" aria-label="Mode">
+  <button id="tabMerge" class="tab active" type="button">🔗 Gabung</button>
+  <button id="tabSplit" class="tab" type="button">✂️ Pisah</button>
+</nav>
+
 <main class="wrap">
+
+<!-- ============ MODE GABUNG ============ -->
+<div id="paneMerge">
 
   <section id="dropzone" class="dropzone" aria-label="Area upload file">
     <div class="dz-icon">📥</div>
@@ -48,9 +58,27 @@
       <input id="fileNameInput" class="text-input" type="text" value="gabungan.pdf"
              maxlength="120" spellcheck="false" autocomplete="off" aria-label="Nama file hasil">
     </div>
+    <div class="opt-row opt-row-top">
+      <span class="opt-label">Kualitas hasil</span>
+      <div class="seg" role="radiogroup" aria-label="Kualitas hasil">
+        <label class="seg-opt"><input type="radio" name="quality" value="asli" checked><span>Asli</span></label>
+        <label class="seg-opt"><input type="radio" name="quality" value="tinggi"><span>Tinggi</span></label>
+        <label class="seg-opt"><input type="radio" name="quality" value="sedang"><span>Sedang</span></label>
+        <label class="seg-opt"><input type="radio" name="quality" value="rendah"><span>Rendah</span></label>
+      </div>
+    </div>
+    <p id="qualityNote" class="field-note" hidden>Mode Tinggi/Sedang/Rendah mengubah tiap halaman menjadi gambar agar jauh lebih kecil — teks tidak bisa diseleksi/dicari.</p>
     <label class="check-row">
       <input id="optimizeCheck" type="checkbox" checked>
       <span>Optimalkan ukuran file <small class="muted">(tanpa mengurangi kualitas)</small></span>
+    </label>
+    <label class="check-row">
+      <input id="pageNumCheck" type="checkbox">
+      <span>Tambah nomor halaman</span>
+      <select id="pageNumPos" class="select-input" aria-label="Posisi nomor halaman">
+        <option value="center">Bawah-tengah</option>
+        <option value="right">Bawah-kanan</option>
+      </select>
     </label>
     <button id="mergeBtn" class="btn btn-primary btn-big" type="button">⬇ Gabung &amp; Download <span id="mergeCount"></span></button>
     <p id="resultInfo" class="result-info" hidden></p>
@@ -58,14 +86,72 @@
   </div>
 
   <section class="howto">
-    <h2>Cara pakai</h2>
+    <h2>Cara pakai — Gabung</h2>
     <ol>
       <li>Tambahkan file PDF / JPG / PNG / WebP (bisa campur).</li>
       <li><strong>Susun urutan file</strong>: seret kartu file (di HP pakai tombol ▲ ▼). Urutan ini = urutan gabung.</li>
-      <li><strong>Ketuk kartu file</strong> untuk lihat halamannya: ketuk halaman untuk ikut / tidak ikut, seret untuk susun ulang (di HP pakai ◀ ▶).</li>
-      <li>Atur <strong>nama file hasil</strong> &amp; opsi optimasi ukuran, lalu tekan <strong>Gabung &amp; Download</strong>.</li>
+      <li><strong>Ketuk kartu file</strong> untuk lihat halamannya: ketuk halaman untuk ikut / tidak ikut, seret untuk susun ulang (di HP pakai ◀ ▶), tombol ⟳ untuk putar halaman.</li>
+      <li>Atur <strong>nama file hasil</strong>, <strong>kualitas</strong>, &amp; opsi lain, lalu tekan <strong>Gabung &amp; Download</strong>.</li>
     </ol>
   </section>
+
+</div>
+
+<!-- ============ MODE PISAH ============ -->
+<div id="paneSplit" hidden>
+
+  <section id="splitDropzone" class="dropzone" aria-label="Area upload PDF untuk dipisah">
+    <div class="dz-icon">✂️</div>
+    <p class="dz-title"><strong>Tarik &amp; letakkan 1 file PDF di sini</strong></p>
+    <p class="dz-sub">atau</p>
+    <button id="splitPickBtn" class="btn" type="button">Pilih PDF</button>
+    <p class="dz-hint">Hanya 1 file PDF</p>
+    <input id="splitFileInput" type="file" accept=".pdf,application/pdf" hidden>
+  </section>
+
+  <div id="splitWork" class="split-work" hidden>
+    <p class="split-fileinfo"><strong id="splitFileName"></strong> · <span id="splitPageCount"></span></p>
+
+    <div class="radio-col" role="radiogroup" aria-label="Metode pisah">
+      <label class="radio-row">
+        <input type="radio" name="splitMode" value="range" checked>
+        <span><strong>Rentang custom</strong><br>
+        <input id="rangeInput" class="text-input range-input" type="text" placeholder="mis. 1-5, 8, 10-12"
+               spellcheck="false" autocomplete="off" aria-label="Rentang halaman"></span>
+      </label>
+      <label class="radio-row">
+        <input type="radio" name="splitMode" value="every">
+        <span><strong>Tiap N halaman</strong><br>
+        Tiap <input id="everyNInput" class="text-input num-input" type="number" min="1" value="10"
+               aria-label="Tiap N halaman"> halaman jadi 1 file</span>
+      </label>
+      <label class="radio-row">
+        <input type="radio" name="splitMode" value="each">
+        <span><strong>Tiap halaman jadi 1 file</strong></span>
+      </label>
+    </div>
+
+    <div class="opt-row">
+      <label class="opt-label" for="splitBaseName">Nama dasar file</label>
+      <input id="splitBaseName" class="text-input" type="text" value="dokumen"
+             maxlength="100" spellcheck="false" autocomplete="off" aria-label="Nama dasar file">
+    </div>
+
+    <button id="splitBtn" class="btn btn-primary btn-big" type="button">✂️ Pisah &amp; Download ZIP</button>
+    <p id="splitResultInfo" class="result-info" hidden></p>
+    <p class="privacy">🔒 Semua proses di perangkatmu. Hasil diunduh sebagai 1 file ZIP.</p>
+  </div>
+
+  <section class="howto">
+    <h2>Cara pakai — Pisah</h2>
+    <ol>
+      <li>Pilih 1 file PDF.</li>
+      <li>Pilih metode: <strong>rentang custom</strong> (mis. 1-5, 8), <strong>tiap N halaman</strong>, atau <strong>tiap halaman</strong> jadi 1 file.</li>
+      <li>Atur <strong>nama dasar file</strong>, lalu tekan <strong>Pisah &amp; Download ZIP</strong>.</li>
+    </ol>
+  </section>
+
+</div>
 
 </main>
 
