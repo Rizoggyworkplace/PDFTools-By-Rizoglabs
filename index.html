@@ -17,7 +17,8 @@
 <meta name="twitter:image" content="https://rizoggyworkplace.github.io/PDFTools-By-Rizoglabs/assets/icons/Ikon%20Aplikasi%20PDF%20Tools%20Rizoglabs.png.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="assets/css/style.css">
 <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
@@ -30,14 +31,14 @@
   <div class="brand"><img class="brand-mark" src="assets/icons/Ikon%20Aplikasi%20PDF%20Tools%20Rizoglabs.png.png" alt="PDF Tools"><strong>PDF Tools</strong></div>
   <div class="tagline">PDF &amp; gambar — 100% di browser, tanpa upload</div>
   <div class="top-actions">
-    <button id="installBtn" class="btn btn-install" type="button" hidden>📲 Install</button>
-    <button id="themeToggle" class="icon-btn theme-toggle" type="button" aria-label="Ganti mode gelap/terang" title="Mode gelap/terang">🌙</button>
+    <button id="installBtn" class="btn btn-install" type="button" hidden><span class="msr">install_mobile</span> Install</button>
+    <button id="themeToggle" class="icon-btn theme-toggle" type="button" aria-label="Ganti mode gelap/terang" title="Mode gelap/terang"><span class="msr">dark_mode</span></button>
   </div>
 </header>
 
 <nav class="tabs" aria-label="Mode">
-  <button id="tabMerge" class="tab active" type="button">🔗 Gabung</button>
-  <button id="tabSplit" class="tab" type="button">✂️ Pisah</button>
+  <button id="tabMerge" class="tab active" type="button"><span class="msr">merge</span> Gabung</button>
+  <button id="tabSplit" class="tab" type="button"><span class="msr">content_cut</span> Pisah</button>
 </nav>
 
 <main class="wrap">
@@ -46,7 +47,7 @@
 <div id="paneMerge">
 
   <section id="dropzone" class="dropzone" aria-label="Area upload file">
-    <div class="dz-icon">📥</div>
+    <div class="dz-icon"><span class="msr">upload_file</span></div>
     <p class="dz-title"><strong>Tarik &amp; letakkan file di sini</strong></p>
     <p class="dz-sub">atau</p>
     <button id="pickBtn" class="btn" type="button">Pilih File</button>
@@ -87,9 +88,9 @@
     <p id="qualityNote" class="field-note" hidden>Mode Tinggi/Sedang/Rendah mengubah tiap halaman menjadi gambar agar jauh lebih kecil — teks tidak bisa diseleksi/dicari.</p>
     <div class="preset-row" aria-label="Preset cepat">
       <span class="opt-label">Preset:</span>
-      <button class="btn btn-chip" type="button" data-preset="wa">📱 Buat WA</button>
-      <button class="btn btn-chip" type="button" data-preset="email">✉️ Buat Email</button>
-      <button class="btn btn-chip" type="button" data-preset="max">💎 Kualitas Maksimal</button>
+      <button class="btn btn-chip" type="button" data-preset="wa"><span class="msr">chat</span> Buat WA</button>
+      <button class="btn btn-chip" type="button" data-preset="email"><span class="msr">mail</span> Buat Email</button>
+      <button class="btn btn-chip" type="button" data-preset="max"><span class="msr">diamond</span> Kualitas Maksimal</button>
     </div>
     <label class="check-row">
       <input id="optimizeCheck" type="checkbox" checked>
@@ -103,17 +104,17 @@
         <option value="right">Bawah-kanan</option>
       </select>
     </label>
-    <button id="mergeBtn" class="btn btn-primary btn-big" type="button">⬇ Gabung &amp; Download <span id="mergeCount"></span></button>
+    <button id="mergeBtn" class="btn btn-primary btn-big" type="button"><span class="msr">download</span> Gabung &amp; Download <span id="mergeCount"></span></button>
     <p id="resultInfo" class="result-info" hidden></p>
-    <p class="privacy">🔒 Semua proses di perangkatmu. Tidak ada file yang dikirim ke server.</p>
+    <p class="privacy"><span class="msr">lock</span> Semua proses di perangkatmu. Tidak ada file yang dikirim ke server.</p>
   </div>
 
   <section id="historySection" class="history" hidden aria-label="Riwayat pemrosesan">
     <div class="history-head">
-      <h2>🕘 Terakhir diproses</h2>
+      <h2><span class="msr">history</span> Terakhir diproses</h2>
       <button id="historyClearBtn" class="btn btn-ghost btn-danger" type="button">Hapus semua</button>
     </div>
-    <p class="history-note">🔒 Isi file <strong>tidak</strong> disimpan — ini hanya catatan (nama, tanggal, ukuran).</p>
+    <p class="history-note"><span class="msr">lock</span> Isi file <strong>tidak</strong> disimpan — ini hanya catatan (nama, tanggal, ukuran).</p>
     <ul id="historyList" class="history-list"></ul>
   </section>
 
@@ -121,8 +122,8 @@
     <h2>Cara pakai — Gabung</h2>
     <ol>
       <li>Tambahkan file PDF / JPG / PNG / WebP (bisa campur).</li>
-      <li><strong>Susun urutan file</strong>: seret kartu file (di HP pakai tombol ▲ ▼). Urutan ini = urutan gabung.</li>
-      <li><strong>Ketuk kartu file</strong> untuk lihat halamannya: ketuk halaman untuk ikut / tidak ikut, seret untuk susun ulang (di HP pakai ◀ ▶), tombol ⟳ untuk putar halaman.</li>
+      <li><strong>Susun urutan file</strong>: seret kartu file (di HP pakai tombol <span class="msr">arrow_upward</span> <span class="msr">arrow_downward</span>). Urutan ini = urutan gabung.</li>
+      <li><strong>Ketuk kartu file</strong> untuk lihat halamannya: ketuk halaman untuk ikut / tidak ikut, seret untuk susun ulang (di HP pakai <span class="msr">arrow_back</span> <span class="msr">arrow_forward</span>), tombol <span class="msr">rotate_right</span> untuk putar halaman.</li>
       <li>Atur <strong>nama file hasil</strong>, <strong>kualitas</strong>, &amp; opsi lain, lalu tekan <strong>Gabung &amp; Download</strong>.</li>
     </ol>
   </section>
@@ -133,7 +134,7 @@
 <div id="paneSplit" hidden>
 
   <section id="splitDropzone" class="dropzone" aria-label="Area upload PDF untuk dipisah">
-    <div class="dz-icon">✂️</div>
+    <div class="dz-icon"><span class="msr">content_cut</span></div>
     <p class="dz-title"><strong>Tarik &amp; letakkan 1 file PDF di sini</strong></p>
     <p class="dz-sub">atau</p>
     <button id="splitPickBtn" class="btn" type="button">Pilih PDF</button>
@@ -169,9 +170,9 @@
              maxlength="100" spellcheck="false" autocomplete="off" aria-label="Nama dasar file">
     </div>
 
-    <button id="splitBtn" class="btn btn-primary btn-big" type="button">✂️ Pisah &amp; Download ZIP</button>
+    <button id="splitBtn" class="btn btn-primary btn-big" type="button"><span class="msr">folder_zip</span> Pisah &amp; Download ZIP</button>
     <p id="splitResultInfo" class="result-info" hidden></p>
-    <p class="privacy">🔒 Semua proses di perangkatmu. Hasil diunduh sebagai 1 file ZIP.</p>
+    <p class="privacy"><span class="msr">lock</span> Semua proses di perangkatmu. Hasil diunduh sebagai 1 file ZIP.</p>
   </div>
 
   <section class="howto">
@@ -196,11 +197,11 @@
         <div id="previewTitle" class="modal-title">Pratinjau hasil</div>
         <div id="previewInfo" class="modal-sub"></div>
       </div>
-      <button id="previewClose" class="icon-btn" type="button" aria-label="Tutup pratinjau">✕</button>
+      <button id="previewClose" class="icon-btn" type="button" aria-label="Tutup pratinjau"><span class="msr">close</span></button>
     </div>
     <div id="previewBody" class="modal-body"></div>
     <div class="modal-foot">
-      <button id="previewDownload" class="btn btn-primary" type="button">⬇ Download</button>
+      <button id="previewDownload" class="btn btn-primary" type="button"><span class="msr">download</span> Download</button>
       <button id="previewAgain" class="btn" type="button">Proses lagi</button>
     </div>
   </div>

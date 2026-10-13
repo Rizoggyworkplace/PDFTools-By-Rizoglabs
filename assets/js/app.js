@@ -34,7 +34,7 @@
   function iconBtn(label, title, onClick) {
     const b = document.createElement("button");
     b.type = "button"; b.className = "icon-btn";
-    b.textContent = label; b.title = title; b.setAttribute("aria-label", title);
+    b.innerHTML = '<span class="msr">' + label + '</span>'; b.title = title; b.setAttribute("aria-label", title);
     b.addEventListener("click", (e) => { e.stopPropagation(); onClick(); });
     return b;
   }
@@ -274,13 +274,13 @@
 
       const movers = document.createElement("div");
       movers.className = "file-movers";
-      movers.appendChild(iconBtn("▲", "Pindah ke atas", () => moveFile(f.uid, -1)));
-      movers.appendChild(iconBtn("▼", "Pindah ke bawah", () => moveFile(f.uid, 1)));
+      movers.appendChild(iconBtn("arrow_upward", "Pindah ke atas", () => moveFile(f.uid, -1)));
+      movers.appendChild(iconBtn("arrow_downward", "Pindah ke bawah", () => moveFile(f.uid, 1)));
 
       const exp = document.createElement("span");
-      exp.className = "expand-ind"; exp.textContent = f.expanded ? "▾" : "▸";
+      exp.className = "expand-ind"; exp.innerHTML = '<span class="msr">' + (f.expanded ? "expand_more" : "chevron_right") + '</span>';
 
-      const rm = iconBtn("✕", "Hapus file ini", () => {
+      const rm = iconBtn("close", "Hapus file ini", () => {
         pages = pages.filter((p) => p.fileUid !== f.uid);
         files = files.filter((x) => x.uid !== f.uid);
         render();
@@ -348,18 +348,18 @@
 
     const rotBadge = document.createElement("div");
     rotBadge.className = "rot-badge" + (p.rotation ? " on" : "");
-    rotBadge.textContent = p.rotation ? "⟳" + p.rotation + "°" : "";
+    rotBadge.innerHTML = p.rotation ? '<span class="msr">rotate_right</span>' + p.rotation + "°" : "";
     card.appendChild(rotBadge);
 
     const check = document.createElement("div");
-    check.className = "check"; check.textContent = "✓";
+    check.className = "check"; check.innerHTML = '<span class="msr">check</span>';
     card.appendChild(check);
 
     const movers = document.createElement("div");
     movers.className = "movers";
-    movers.appendChild(iconBtn("◀", "Geser kiri", () => movePageWithinFile(p.uid, -1)));
-    movers.appendChild(iconBtn("▶", "Geser kanan", () => movePageWithinFile(p.uid, 1)));
-    movers.appendChild(iconBtn("⟳", "Putar 90°", () => {
+    movers.appendChild(iconBtn("arrow_back", "Geser kiri", () => movePageWithinFile(p.uid, -1)));
+    movers.appendChild(iconBtn("arrow_forward", "Geser kanan", () => movePageWithinFile(p.uid, 1)));
+    movers.appendChild(iconBtn("rotate_90_degrees_cw", "Putar 90°", () => {
       p.rotation = ((p.rotation || 0) + 90) % 360;
       render();
     }));
@@ -367,7 +367,7 @@
 
     const meta = document.createElement("div");
     meta.className = "page-meta";
-    meta.textContent = (p.kind === "pdf" ? "Hal " + p.pageNum : "gambar") + (p.rotation ? " · ⟳" + p.rotation + "°" : "");
+    meta.innerHTML = (p.kind === "pdf" ? "Hal " + p.pageNum : "gambar") + (p.rotation ? ' · <span class="msr">rotate_right</span>' + p.rotation + "°" : "");
     card.appendChild(meta);
 
     card.addEventListener("click", (e) => { e.stopPropagation(); p.included = !p.included; render(); });
@@ -472,7 +472,7 @@
         bodyNode: frame,
         blob: blob,
         fileName: fileName,
-        downloadLabel: "⬇ Download PDF",
+        downloadLabel: '<span class="msr">download</span> Download PDF',
       });
       toast("Berhasil! " + chosen.length + " halaman digabung.");
     } catch (err) {
@@ -654,7 +654,7 @@
         bodyNode: ul,
         blob: blob,
         fileName: zipName,
-        downloadLabel: "⬇ Download ZIP",
+        downloadLabel: '<span class="msr">download</span> Download ZIP',
       });
       toast("Berhasil! " + parts.length + " file dalam ZIP.");
     } catch (err) {
@@ -671,9 +671,9 @@
   const THEME_KEY = "pdftools-theme";
   function applyTheme(t) {
     document.documentElement.dataset.theme = t;
-    themeToggle.textContent = t === "dark" ? "☀️" : "🌙";
+    themeToggle.innerHTML = '<span class="msr">' + (t === "dark" ? "light_mode" : "dark_mode") + '</span>';
     themeToggle.setAttribute("aria-label", t === "dark" ? "Ganti ke mode terang" : "Ganti ke mode gelap");
-    if (themeColorMeta) themeColorMeta.content = t === "dark" ? "#0c1322" : "#16a34a";
+    if (themeColorMeta) themeColorMeta.content = t === "dark" ? "#0c1322" : "#e11d48";
   }
   (function initTheme() {
     let t = null;
@@ -752,7 +752,7 @@
     }
     previewModal._blobUrl = url;
     previewModal._fileName = opts.fileName || "hasil.pdf";
-    previewDownload.textContent = opts.downloadLabel || "⬇ Download";
+    previewDownload.innerHTML = opts.downloadLabel || '<span class="msr">download</span> Download';
     previewModal.hidden = false;
     document.body.style.overflow = "hidden";
   }
@@ -818,7 +818,7 @@
       meta.className = "h-meta";
       meta.textContent = fmtHistDate(h.date) + " · " + U.fmtSize(h.sizeBytes) +
         " · " + h.pageCount + " hal" + (h.quality ? " · " + h.quality : "");
-      const del = iconBtn("✕", "Hapus dari riwayat", () => {
+      const del = iconBtn("close", "Hapus dari riwayat", () => {
         const l = loadHistory();
         l.splice(i, 1);
         saveHistoryList(l);
