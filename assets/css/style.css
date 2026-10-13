@@ -6,10 +6,10 @@
   --ink-soft:#3a4763;
   --muted:#6b7a93;
   --line:#e3e9f3;
-  --accent:#16a34a;
-  --accent-d:#15803d;
-  --accent-soft:#f0fdf4;
-  --accent-line:#bbf7d0;
+  --accent:#e11d48;
+  --accent-d:#be123c;
+  --accent-soft:#fff1f2;
+  --accent-line:#fecdd3;
   --danger:#dc2626;
   --danger-soft:#fef2f2;
   --ok:#16a34a;
@@ -19,7 +19,7 @@
   --radius:14px;
   --shadow-sm:0 1px 2px rgba(22,33,58,.06),0 2px 10px rgba(22,33,58,.05);
   --shadow-md:0 6px 18px rgba(22,33,58,.10),0 2px 6px rgba(22,33,58,.06);
-  --shadow-accent:0 8px 22px rgba(22,163,74,.32);
+  --shadow-accent:0 8px 22px rgba(225,29,72,.32);
   --ease:cubic-bezier(.2,.7,.3,1);
 }
 *{box-sizing:border-box}
@@ -28,7 +28,7 @@ body{
   margin:0;
   font-family:"Inter",system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;
   background:var(--bg);
-  background-image:radial-gradient(1200px 400px at 50% -120px,rgba(99,102,241,.10),transparent 70%);
+  background-image:radial-gradient(1200px 400px at 50% -120px,rgba(225,29,72,.08),transparent 70%);
   color:var(--ink);
   -webkit-tap-highlight-color:transparent;
   line-height:1.5;
@@ -88,7 +88,7 @@ body{
 .dropzone.dragover{
   border-color:var(--accent);background:var(--accent-soft);
   transform:scale(1.006);
-  box-shadow:0 0 0 5px rgba(22,163,74,.14),var(--shadow-md);
+  box-shadow:0 0 0 5px rgba(225,29,72,.14),var(--shadow-md);
 }
 .dz-icon{
   font-size:1.9rem;width:66px;height:66px;margin:0 auto 6px;
@@ -112,10 +112,10 @@ body{
 .btn:hover{border-color:#b9c6dd;transform:translateY(-1px);box-shadow:var(--shadow-sm)}
 .btn:active{transform:translateY(0);box-shadow:none}
 .btn-primary{
-  background:linear-gradient(135deg,#22c55e,#16a34a);
+  background:linear-gradient(135deg,#fb7185,#e11d48);
   border:none;color:#fff;box-shadow:var(--shadow-accent);
 }
-.btn-primary:hover{background:linear-gradient(135deg,#1faa53,#15803d);box-shadow:0 10px 26px rgba(22,163,74,.42)}
+.btn-primary:hover{background:linear-gradient(135deg,#f43f5e,#be123c);box-shadow:0 10px 26px rgba(225,29,72,.42)}
 .btn-primary:disabled{opacity:.6;cursor:wait;transform:none}
 .btn-ghost{background:transparent}
 .btn-danger{color:var(--danger);border-color:#f3c2c2;background:#fff}
@@ -171,9 +171,9 @@ body{
 .rot-badge.on{display:block}
 .check{
   position:absolute;bottom:36px;right:7px;width:25px;height:25px;border-radius:50%;
-  background:linear-gradient(135deg,#22c55e,#16a34a);color:#fff;
+  background:linear-gradient(135deg,#fb7185,#e11d48);color:#fff;
   display:flex;align-items:center;justify-content:center;font-size:.8rem;font-weight:700;
-  box-shadow:0 2px 8px rgba(22,163,74,.5);
+  box-shadow:0 2px 8px rgba(225,29,72,.5);
 }
 .page-card.excluded .check{display:none}
 .movers{position:absolute;bottom:36px;left:7px;display:flex;gap:5px}
@@ -252,7 +252,7 @@ body{
   padding:10px 13px;font-size:.95rem;color:var(--ink);background:#fbfcff;
   transition:border-color .15s,box-shadow .15s;font-family:inherit;
 }
-.text-input:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px rgba(22,163,74,.14);background:#fff}
+.text-input:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px rgba(225,29,72,.14);background:#fff}
 .select-input{
   border:1.5px solid var(--line);border-radius:9px;padding:7px 10px;
   font-size:.85rem;background:#fbfcff;color:var(--ink);font-family:inherit;
@@ -382,10 +382,10 @@ body{
   --ink-soft:#b9c5d9;
   --muted:#8b99b0;
   --line:#263449;
-  --accent:#22c55e;
-  --accent-d:#4ade80;
-  --accent-soft:#0e2a18;
-  --accent-line:#1c5b31;
+  --accent:#fb7185;
+  --accent-d:#fda4af;
+  --accent-soft:#2b1218;
+  --accent-line:#881337;
   --danger:#f87171;
   --danger-soft:#2a1414;
   --ok:#22c55e;
@@ -394,10 +394,10 @@ body{
   --warn-line:#8a6d1c;
   --shadow-sm:0 1px 2px rgba(0,0,0,.35),0 2px 10px rgba(0,0,0,.3);
   --shadow-md:0 6px 18px rgba(0,0,0,.4),0 2px 6px rgba(0,0,0,.3);
-  --shadow-accent:0 8px 22px rgba(34,197,94,.25);
+  --shadow-accent:0 8px 22px rgba(251,113,133,.25);
 }
 [data-theme="dark"] body{
-  background-image:radial-gradient(1200px 400px at 50% -120px,rgba(34,197,94,.10),transparent 70%);
+  background-image:radial-gradient(1200px 400px at 50% -120px,rgba(251,113,133,.10),transparent 70%);
 }
 [data-theme="dark"] .topbar{background:rgba(13,20,34,.86)}
 [data-theme="dark"] .tabs{background:#1a2638}
