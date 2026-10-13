@@ -1,0 +1,66 @@
+:root{
+  --bg:#f6f7f9; --card:#ffffff; --ink:#1c2430; --muted:#6b7686;
+  --line:#e3e7ed; --accent:#2563eb; --accent-d:#1d4ed8;
+  --danger:#dc2626; --ok:#16a34a; --radius:12px;
+}
+*{box-sizing:border-box}
+body{margin:0;font-family:system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;background:var(--bg);color:var(--ink);-webkit-tap-highlight-color:transparent}
+.topbar{display:flex;align-items:center;gap:12px;padding:14px 18px;background:var(--card);border-bottom:1px solid var(--line);position:sticky;top:0;z-index:20}
+.brand{font-size:1.25rem;white-space:nowrap}
+.tagline{font-size:.85rem;color:var(--muted)}
+.wrap{max-width:1100px;margin:0 auto;padding:18px 14px 40px}
+
+.dropzone{border:2px dashed #b9c4d4;border-radius:var(--radius);background:var(--card);text-align:center;padding:34px 16px;cursor:pointer;transition:border-color .15s,background .15s}
+.dropzone.dragover{border-color:var(--accent);background:#eff4ff}
+.dz-icon{font-size:2.2rem}
+.dz-title{margin:8px 0 2px;font-size:1.05rem}
+.dz-sub{margin:4px 0;color:var(--muted);font-size:.9rem}
+.dz-hint{margin:10px 0 0;color:var(--muted);font-size:.82rem}
+
+.btn{border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:9px;padding:9px 16px;font-size:.95rem;cursor:pointer}
+.btn:hover{border-color:#b9c4d4}
+.btn-primary{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
+.btn-primary:hover{background:var(--accent-d)}
+.btn-primary:disabled{opacity:.55;cursor:wait}
+.btn-ghost{background:transparent}
+.btn-danger{color:var(--danger);border-color:#f0c9c9}
+.btn-big{font-size:1.1rem;padding:14px 26px;border-radius:12px;width:100%;max-width:420px}
+
+.toolbar{display:flex;justify-content:space-between;align-items:center;gap:10px;margin:18px 0 12px;flex-wrap:wrap}
+.stat{font-weight:600}
+.tool-right{display:flex;gap:8px;flex-wrap:wrap}
+
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px}
+@media (max-width:560px){.grid{grid-template-columns:repeat(auto-fill,minmax(108px,1fr));gap:10px}}
+
+.page-card{position:relative;background:var(--card);border:2px solid var(--line);border-radius:10px;overflow:hidden;cursor:pointer;user-select:none;transition:border-color .12s,transform .12s}
+.page-card:hover{border-color:#9fb4d8}
+.page-card.included{border-color:var(--accent)}
+.page-card.excluded{opacity:.62}
+.page-card.excluded .thumb{filter:grayscale(1)}
+.page-card.dragging{opacity:.4;transform:scale(.97)}
+.page-card.drop-target{outline:3px dashed var(--accent);outline-offset:-3px}
+.thumb{display:block;width:100%;aspect-ratio:3/4;object-fit:contain;background:#fff}
+.page-meta{padding:6px 8px;font-size:.75rem;color:var(--muted);border-top:1px solid var(--line);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.page-num{position:absolute;top:6px;left:6px;background:rgba(20,28,40,.82);color:#fff;font-size:.72rem;font-weight:700;border-radius:6px;padding:2px 7px}
+.badge-ex{position:absolute;top:6px;right:6px;background:var(--danger);color:#fff;font-size:.68rem;font-weight:700;border-radius:6px;padding:2px 7px;display:none}
+.page-card.excluded .badge-ex{display:block}
+.check{position:absolute;bottom:34px;right:6px;width:24px;height:24px;border-radius:50%;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-size:.8rem;font-weight:700}
+.page-card.excluded .check{display:none}
+.movers{position:absolute;bottom:34px;left:6px;display:flex;gap:4px}
+.movers button{width:26px;height:26px;border-radius:7px;border:1px solid var(--line);background:rgba(255,255,255,.94);font-size:.85rem;cursor:pointer;line-height:1;padding:0}
+
+.empty-hint{text-align:center;color:var(--muted);margin:26px 0}
+
+.actionbar{text-align:center;margin:26px 0 8px}
+.privacy{color:var(--muted);font-size:.85rem;margin-top:10px}
+
+.howto{margin-top:34px;background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:16px 20px}
+.howto h2{margin:0 0 8px;font-size:1.05rem}
+.howto ol{margin:0;padding-left:20px;color:#3a4453;font-size:.93rem}
+.howto li{margin:5px 0}
+
+.footer{text-align:center;color:var(--muted);font-size:.8rem;padding:18px}
+
+.toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%) translateY(20px);background:#1c2430;color:#fff;padding:11px 18px;border-radius:10px;font-size:.9rem;opacity:0;pointer-events:none;transition:opacity .2s,transform .2s;z-index:50;max-width:90vw;text-align:center}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}

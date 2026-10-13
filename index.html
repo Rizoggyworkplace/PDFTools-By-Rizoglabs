@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PDF Tools — Gabung PDF Gratis, 100% di Browser</title>
+<meta name="description" content="Gabungkan banyak PDF dan gambar menjadi satu PDF. Semua proses di browser, file tidak pernah di-upload.">
+<link rel="stylesheet" href="assets/css/style.css">
+<script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand">📄 <strong>PDF Tools</strong></div>
+  <div class="tagline">Gabung PDF &amp; gambar — 100% di browser, tanpa upload</div>
+</header>
+
+<main class="wrap">
+
+  <section id="dropzone" class="dropzone" aria-label="Area upload file">
+    <div class="dz-icon">📥</div>
+    <p class="dz-title"><strong>Tarik &amp; letakkan file di sini</strong></p>
+    <p class="dz-sub">atau</p>
+    <button id="pickBtn" class="btn" type="button">Pilih File</button>
+    <p class="dz-hint">PDF, JPG, PNG, WebP — bisa banyak sekaligus</p>
+    <input id="fileInput" type="file" accept=".pdf,.jpg,.jpeg,.png,.webp,application/pdf,image/jpeg,image/png,image/webp" multiple hidden>
+  </section>
+
+  <section id="toolbar" class="toolbar" hidden>
+    <div class="tool-left">
+      <span id="statText" class="stat">0 halaman</span>
+    </div>
+    <div class="tool-right">
+      <button id="selectAllBtn" class="btn btn-ghost" type="button">Pilih semua</button>
+      <button id="deselectAllBtn" class="btn btn-ghost" type="button">Batal pilih</button>
+      <button id="clearBtn" class="btn btn-ghost btn-danger" type="button">Hapus semua</button>
+    </div>
+  </section>
+
+  <section id="grid" class="grid" aria-label="Daftar halaman"></section>
+
+  <p id="emptyHint" class="empty-hint">Belum ada file. Tambahkan PDF atau gambar untuk mulai.</p>
+
+  <div id="actionBar" class="actionbar" hidden>
+    <button id="mergeBtn" class="btn btn-primary btn-big" type="button">⬇ Gabung &amp; Download <span id="mergeCount"></span></button>
+    <p class="privacy">🔒 Semua proses di perangkatmu. Tidak ada file yang dikirim ke server.</p>
+  </div>
+
+  <section class="howto">
+    <h2>Cara pakai</h2>
+    <ol>
+      <li>Tambahkan file PDF / JPG / PNG / WebP (bisa campur).</li>
+      <li><strong>Ketuk</strong> halaman untuk ikut / tidak ikut digabung.</li>
+      <li><strong>Seret</strong> halaman untuk susun ulang (di HP pakai tombol ◀ ▶).</li>
+      <li>Tekan <strong>Gabung &amp; Download</strong>.</li>
+    </ol>
+  </section>
+
+</main>
+
+<footer class="footer">PDF Tools · berjalan sepenuhnya di browser</footer>
+
+<div id="toast" class="toast" role="status"></div>
+
+<script src="assets/js/app.js"></script>
+</body>
+</html>
