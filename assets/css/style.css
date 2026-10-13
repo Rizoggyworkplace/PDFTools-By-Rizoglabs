@@ -47,10 +47,9 @@ body{
 }
 .brand{display:flex;align-items:center;gap:10px;font-size:1.2rem;letter-spacing:-.01em;white-space:nowrap}
 .brand-mark{
-  display:inline-flex;align-items:center;justify-content:center;
-  width:38px;height:38px;border-radius:12px;font-size:1.3rem;
-  background:linear-gradient(135deg,#22c55e,#4ade80);
-  box-shadow:0 4px 12px rgba(99,102,241,.38);
+  display:inline-block;
+  width:38px;height:38px;border-radius:12px;object-fit:cover;
+  box-shadow:0 4px 12px rgba(0,0,0,.18);
 }
 .tagline{
   font-size:.76rem;font-weight:600;color:var(--accent-d);
