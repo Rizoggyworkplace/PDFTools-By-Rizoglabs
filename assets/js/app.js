@@ -13,6 +13,8 @@
   const fileList = $("fileList"), toolbar = $("toolbar"), actionBar = $("actionBar");
   const emptyHint = $("emptyHint"), statText = $("statText"), mergeBtn = $("mergeBtn");
   const mergeCount = $("mergeCount"), toastEl = $("toast");
+  const fileNameInput = $("fileNameInput"), optimizeCheck = $("optimizeCheck");
+  const resultInfo = $("resultInfo");
 
   let pages = [];       // {uid,fileUid,fileName,kind:'pdf'|'img',pageNum,pdfBytes,imgDataUrl,thumbUrl,included}
   let files = [];       // {uid,name,expanded} — urutan array = urutan gabung
@@ -192,6 +194,7 @@
 
   function render() {
     fileList.innerHTML = "";
+    resultInfo.hidden = true; // info hasil merge terakhir tidak berlaku lagi bila daftar berubah
     const has = files.length > 0;
     toolbar.hidden = !has; actionBar.hidden = !has; emptyHint.style.display = has ? "none" : "";
     const inc = pages.filter((p) => p.included).length;
@@ -282,6 +285,24 @@
     fileList.querySelectorAll(".drop-target").forEach((el) => el.classList.remove("drop-target"));
   }
 
+  /* ---------- nama file hasil & format ukuran ---------- */
+
+  // Bersihkan nama file dari karakter ilegal; pastikan berekstensi .pdf.
+  function resolveFileName(raw) {
+    let s = String(raw == null ? "" : raw).trim();
+    s = s.replace(/[<>:"/\\|?*\x00-\x1f]/g, ""); // karakter ilegal nama file
+    s = s.replace(/\.+$/g, "");                  // titik di ujung
+    if (!s) s = "gabungan";
+    if (/\.pdf$/i.test(s)) return s.length <= 120 ? s : s.slice(0, 116) + ".pdf";
+    return s.slice(0, 116) + ".pdf";
+  }
+
+  function fmtSize(bytes) {
+    if (bytes >= 1048576) return (bytes / 1048576).toFixed(2).replace(".", ",") + " MB";
+    if (bytes >= 1024) return Math.round(bytes / 1024) + " KB";
+    return bytes + " B";
+  }
+
   /* ---------- render: kartu halaman (di dalam file yang di-expand) ---------- */
 
   function pageCard(p) {
@@ -351,14 +372,24 @@
     mergeBtn.disabled = true;
     const oldLabel = mergeBtn.innerHTML;
     mergeBtn.innerHTML = "⏳ Menggabung…";
+    resultInfo.hidden = true;
     try {
-      const bytes = await buildPdf(chosen);
+      const fileName = resolveFileName(fileNameInput.value);
+      const optimize = optimizeCheck.checked;
+      const { bytes, plainBytes } = await buildPdf(chosen, optimize);
       const blob = new Blob([bytes], { type: "application/pdf" });
       const a = document.createElement("a");
       a.href = URL.createObjectURL(blob);
-      a.download = "pdf-tools-gabungan-" + stamp() + ".pdf";
+      a.download = fileName;
       document.body.appendChild(a); a.click(); a.remove();
       setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+      let info = "Ukuran hasil: " + fmtSize(bytes.length);
+      if (plainBytes && plainBytes.length > bytes.length) {
+        const hemat = Math.round((1 - bytes.length / plainBytes.length) * 100);
+        info += " (tanpa optimasi: " + fmtSize(plainBytes.length) + " · hemat " + hemat + "%)";
+      }
+      resultInfo.textContent = info;
+      resultInfo.hidden = false;
       toast("Berhasil! " + chosen.length + " halaman digabung.");
     } catch (err) {
       console.error(err);
@@ -368,7 +399,10 @@
     mergeBtn.disabled = false;
   });
 
-  async function buildPdf(chosen) {
+  // optimize=true: simpan dengan object streams -- lossless & struktural
+  // (tidak recompress/downscale gambar, tidak mengubah teks).
+  // Mengembalikan bytes final + versi tanpa optimasi untuk perbandingan ukuran.
+  async function buildPdf(chosen, optimize) {
     const out = await PDFLib.PDFDocument.create();
     const cache = new Map(); // fileUid -> PDFLib.PDFDocument
     for (const p of chosen) {
@@ -383,14 +417,15 @@
         pg.drawImage(jpg, { x: 0, y: 0, width: jpg.width, height: jpg.height });
       }
     }
-    return await out.save();
+    if (optimize) {
+      const plainBytes = await out.save({ useObjectStreams: false });
+      const bytes = await out.save({ useObjectStreams: true });
+      return { bytes, plainBytes };
+    }
+    return { bytes: await out.save({ useObjectStreams: false }), plainBytes: null };
   }
 
-  function stamp() {
-    const d = new Date(), z = (n) => String(n).padStart(2, "0");
-    return d.getFullYear() + z(d.getMonth() + 1) + z(d.getDate()) + "-" + z(d.getHours()) + z(d.getMinutes());
-  }
-
+  
   if (!window.pdfjsLib || !window.PDFLib) {
     toast("Gagal memuat library (butuh internet untuk CDN).");
   }

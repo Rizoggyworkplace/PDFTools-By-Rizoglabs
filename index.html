@@ -43,7 +43,17 @@
   <p id="emptyHint" class="empty-hint">Belum ada file. Tambahkan PDF atau gambar untuk mulai.</p>
 
   <div id="actionBar" class="actionbar" hidden>
+    <div class="opt-row">
+      <label class="opt-label" for="fileNameInput">Nama file hasil</label>
+      <input id="fileNameInput" class="text-input" type="text" value="gabungan.pdf"
+             maxlength="120" spellcheck="false" autocomplete="off" aria-label="Nama file hasil">
+    </div>
+    <label class="check-row">
+      <input id="optimizeCheck" type="checkbox" checked>
+      <span>Optimalkan ukuran file <small class="muted">(tanpa mengurangi kualitas)</small></span>
+    </label>
     <button id="mergeBtn" class="btn btn-primary btn-big" type="button">⬇ Gabung &amp; Download <span id="mergeCount"></span></button>
+    <p id="resultInfo" class="result-info" hidden></p>
     <p class="privacy">🔒 Semua proses di perangkatmu. Tidak ada file yang dikirim ke server.</p>
   </div>
 
@@ -53,7 +63,7 @@
       <li>Tambahkan file PDF / JPG / PNG / WebP (bisa campur).</li>
       <li><strong>Susun urutan file</strong>: seret kartu file (di HP pakai tombol ▲ ▼). Urutan ini = urutan gabung.</li>
       <li><strong>Ketuk kartu file</strong> untuk lihat halamannya: ketuk halaman untuk ikut / tidak ikut, seret untuk susun ulang (di HP pakai ◀ ▶).</li>
-      <li>Tekan <strong>Gabung &amp; Download</strong>.</li>
+      <li>Atur <strong>nama file hasil</strong> &amp; opsi optimasi ukuran, lalu tekan <strong>Gabung &amp; Download</strong>.</li>
     </ol>
   </section>
 

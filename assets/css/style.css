@@ -72,6 +72,14 @@ body{margin:0;font-family:system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-s
 .empty-hint{text-align:center;color:var(--muted);margin:26px 0}
 
 .actionbar{text-align:center;margin:26px 0 8px}
+.opt-row{display:flex;align-items:center;gap:10px;justify-content:center;margin:0 auto 10px;max-width:420px;flex-wrap:wrap}
+.opt-label{font-size:.9rem;font-weight:600;white-space:nowrap}
+.text-input{flex:1;min-width:180px;border:1px solid var(--line);border-radius:9px;padding:9px 12px;font-size:.95rem;color:var(--ink);background:var(--card)}
+.text-input:focus{outline:2px solid var(--accent);outline-offset:-1px;border-color:var(--accent)}
+.check-row{display:flex;align-items:center;gap:8px;justify-content:center;margin:0 auto 14px;font-size:.92rem;cursor:pointer;user-select:none}
+.check-row input{width:17px;height:17px;accent-color:var(--accent);cursor:pointer;flex:none}
+.check-row .muted{color:var(--muted);font-size:.82rem}
+.result-info{margin:12px auto 0;max-width:520px;background:#ecfdf5;border:1px solid #a7f3d0;color:#065f46;border-radius:10px;padding:10px 14px;font-size:.9rem;font-weight:600}
 .privacy{color:var(--muted);font-size:.85rem;margin-top:10px}
 
 .howto{margin-top:34px;background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:16px 20px}
