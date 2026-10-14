@@ -969,6 +969,7 @@
     redactResultInfo = $("redactResultInfo"), redactPageLabel = $("redactPageLabel"),
     redactZoomLabel = $("redactZoomLabel"), redactSearchAll = $("redactSearchAll"),
     redactSmartBtn = $("redactSmartBtn"), redactSearchAllBtn = $("redactSearchAllBtn"),
+    redactMarkedWrap = $("redactMarkedWrap"), redactMarkedList = $("redactMarkedList"),
     rtoolPan = $("rtoolPan"), rtoolDraw = $("rtoolDraw"), rtoolErase = $("rtoolErase");
 
   const SMART_PATTERNS = [
@@ -999,6 +1000,7 @@
       redactWork.hidden = false;
       redactResultInfo.hidden = true;
       setTool("draw");
+      renderMarkedList();
       await renderRedactThumbs(doc);
       doc.destroy();
       await showRedactPage(1);
@@ -1061,6 +1063,8 @@
       const ctx = redactCanvas.getContext("2d");
       ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, redactCanvas.width, redactCanvas.height);
       await page.render({ canvasContext: ctx, viewport: vp }).promise;
+      // cache posisi teks halaman ini (poin PDF) untuk deteksi teks kotak manual
+      redactState._textBoxes = await pageTextBoxesPt(page, page.getViewport({ scale: 1 }));
       page.cleanup();
       const bg = document.createElement("canvas");
       bg.width = redactCanvas.width; bg.height = redactCanvas.height;
@@ -1142,7 +1146,7 @@
   redactCanvas.addEventListener("pointerdown", (e) => {
     if (redactState.tool === "erase") {
       const i = rHit(rPoint(e));
-      if (i >= 0) { rBoxes().splice(i, 1); paintRedact(); markActiveThumb(); }
+      if (i >= 0) { rBoxes().splice(i, 1); paintRedact(); markActiveThumb(); renderMarkedList(); }
       return;
     }
     if (redactState.tool === "pan") {
@@ -1171,7 +1175,12 @@
     const d = redactState._drag; redactState._drag = null;
     if (!d) return;
     const r = U.normRect(d.x1, d.y1, d.x2, d.y2);
-    if (r.w >= 3 && r.h >= 3) { rBoxes().push(r); markActiveThumb(); }
+    if (r.w >= 3 && r.h >= 3) {
+      r.text = U.textUnderRect(redactState._textBoxes || [], r);
+      r.source = "manual";
+      rBoxes().push(r);
+      markActiveThumb(); renderMarkedList();
+    }
     paintRedact();
   });
   redactCanvas.addEventListener("pointercancel", () => { redactState._drag = null; redactState._pan = null; paintRedact(); });
@@ -1185,18 +1194,54 @@
     showRedactPage(redactState.page);
   });
 
-  function addFoundBoxes(n, found) {
-    if (!found.length) return 0;
+  function addFoundBoxes(n, matches, source) {
+    if (!matches.length) return 0;
     if (!redactState.boxes[n]) redactState.boxes[n] = [];
     let added = 0;
-    for (const r of found) {
-      const b = { x: r.x - 1, y: r.y - 1, w: r.w + 2, h: r.h + 2 };
+    for (const m of matches) {
+      const b = { x: m.x - 1, y: m.y - 1, w: m.w + 2, h: m.h + 2, text: m.text || "", source: source };
       const dup = redactState.boxes[n].some((x) =>
         Math.abs(x.x - b.x) < 1 && Math.abs(x.y - b.y) < 1 && Math.abs(x.w - b.w) < 1 && Math.abs(x.h - b.h) < 1);
       if (!dup) { redactState.boxes[n].push(b); added++; }
     }
     return added;
   }
+
+  // Daftar "ditandai untuk disamarkan" di panel kanan (teks terlihat, bisa hapus satuan).
+  function renderMarkedList() {
+    redactMarkedList.innerHTML = "";
+    const pages = Object.keys(redactState.boxes).map(Number).sort((a, b) => a - b)
+      .filter((n) => (redactState.boxes[n] || []).length);
+    redactMarkedWrap.hidden = !pages.length;
+    for (const n of pages) {
+      const h = document.createElement("div");
+      h.className = "rmarked-page"; h.textContent = "Halaman " + n;
+      redactMarkedList.appendChild(h);
+      redactState.boxes[n].forEach((b, i) => {
+        const item = document.createElement("div"); item.className = "rmarked-item";
+        const ic = document.createElement("span"); ic.className = "msr";
+        ic.textContent = b.source === "manual" ? "crop" : "title";
+        const tx = document.createElement("span"); tx.className = "rmarked-text";
+        tx.textContent = b.text || "Area manual";
+        const x = document.createElement("button"); x.type = "button"; x.className = "icon-btn rmarked-x";
+        x.innerHTML = '<span class="msr">close</span>'; x.setAttribute("aria-label", "Hapus tanda ini");
+        x.addEventListener("click", () => {
+          redactState.boxes[n].splice(i, 1);
+          renderMarkedList(); paintRedact(); markActiveThumb();
+        });
+        item.appendChild(ic); item.appendChild(tx); item.appendChild(x);
+        redactMarkedList.appendChild(item);
+      });
+    }
+  }
+
+  $("redactClearAll").addEventListener("click", () => {
+    if (!Object.keys(redactState.boxes).some((k) => redactState.boxes[k].length)) return;
+    if (confirm("Hapus semua tanda di semua halaman?")) {
+      redactState.boxes = {};
+      renderMarkedList(); paintRedact(); markActiveThumb();
+    }
+  });
 
   // Penyamaran cerdas: NIK, nomor HP, email di SEMUA halaman.
   redactSmartBtn.addEventListener("click", async () => {
@@ -1212,11 +1257,11 @@
           const page = await doc.getPage(n);
           const boxes = await pageTextBoxesPt(page, page.getViewport({ scale: 1 }));
           page.cleanup();
-          for (const pat of SMART_PATTERNS) total += addFoundBoxes(n, U.findPatternRects(boxes, pat.re));
+          for (const pat of SMART_PATTERNS) total += addFoundBoxes(n, U.findPatternMatches(boxes, pat.re), "smart");
         }
       } finally { doc.destroy(); }
       await showRedactPage(redactState.page);
-      markActiveThumb();
+      markActiveThumb(); renderMarkedList();
       toast(total ? total + " data sensitif ditandai di semua halaman" : "Tidak ditemukan pola sensitif");
     } catch (err) { console.error(err); toast("Gagal memindai"); }
     finally { redactSmartBtn.disabled = false; redactSmartBtn.innerHTML = old; }
@@ -1236,12 +1281,12 @@
           const page = await doc.getPage(n);
           const boxes = await pageTextBoxesPt(page, page.getViewport({ scale: 1 }));
           page.cleanup();
-          const c = addFoundBoxes(n, U.findTextRects(boxes, q));
+          const c = addFoundBoxes(n, U.findTextMatches(boxes, q), "search");
           if (c) { total += c; pages++; }
         }
       } finally { doc.destroy(); }
       await showRedactPage(redactState.page);
-      markActiveThumb();
+      markActiveThumb(); renderMarkedList();
       toast(total ? total + " kemunculan ditandai di " + pages + " halaman" : "Tidak ketemu: " + q.trim());
     } catch (err) { console.error(err); toast("Gagal mencari"); }
     finally { redactSearchAllBtn.disabled = false; }
