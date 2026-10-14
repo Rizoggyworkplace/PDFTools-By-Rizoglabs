@@ -40,6 +40,7 @@
   <button id="tabMerge" class="tab active" type="button"><span class="msr">merge</span> Gabung</button>
   <button id="tabSplit" class="tab" type="button"><span class="msr">content_cut</span> Pisah</button>
   <button id="tabCompress" class="tab" type="button"><span class="msr">compress</span> Kompres</button>
+  <button id="tabRedact" class="tab" type="button"><span class="msr">ink_eraser</span> Samarkan</button>
 </nav>
 
 <main class="wrap">
@@ -235,6 +236,61 @@
     </ol>
   </section>
 
+</div>
+
+<!-- ============ MODE SAMARKAN ============ -->
+<div id="paneRedact" hidden>
+
+  <section id="redactDropzone" class="dropzone" aria-label="Area upload PDF untuk disamarkan">
+    <div class="dz-icon"><span class="msr">ink_eraser</span></div>
+    <p class="dz-title"><strong>Tarik &amp; letakkan 1 file PDF di sini</strong></p>
+    <p class="dz-sub">atau</p>
+    <button id="redactPickBtn" class="btn" type="button">Pilih PDF</button>
+    <p class="dz-hint">Hanya 1 file PDF</p>
+    <input id="redactFileInput" type="file" accept=".pdf,application/pdf" hidden>
+  </section>
+
+  <div id="redactWork" class="split-work" hidden>
+    <p class="split-fileinfo"><strong id="redactFileName"></strong> · <span id="redactPageCount"></span></p>
+    <div id="redactGrid" class="rgrid"></div>
+    <button id="redactApplyBtn" class="btn btn-primary btn-big" type="button"><span class="msr">ink_eraser</span> Samarkan &amp; Download</button>
+    <p id="redactResultInfo" class="result-info" hidden></p>
+    <p class="privacy"><span class="msr">lock</span> Area yang ditandai dibakar permanen jadi hitam — tidak bisa dikembalikan. Halaman tanpa tanda tetap asli (teks bisa diseleksi).</p>
+  </div>
+
+  <section class="howto">
+    <h2>Cara pakai — Samarkan</h2>
+    <ol>
+      <li>Pilih 1 file PDF.</li>
+      <li>Ketuk halaman untuk menandai area sensitif (gambar kotak) atau cari teks untuk ditandai otomatis.</li>
+      <li>Tekan <strong>Samarkan &amp; Download</strong>.</li>
+    </ol>
+  </section>
+
+</div>
+
+<div id="redactEditor" class="modal" hidden role="dialog" aria-modal="true" aria-label="Editor samarkan">
+  <div class="modal-card redit-card">
+    <div class="modal-head">
+      <div>
+        <div id="reditTitle" class="modal-title">Samarkan — Hal 1</div>
+        <div class="modal-sub">Seret di halaman untuk menandai area. Ketuk kotak untuk memilih lalu hapus.</div>
+      </div>
+      <button id="reditClose" class="icon-btn" type="button" aria-label="Tutup editor"><span class="msr">close</span></button>
+    </div>
+    <div class="redit-toolbar">
+      <input id="reditSearch" class="text-input" type="text" placeholder="Cari teks untuk ditandai…" aria-label="Cari teks" autocomplete="off" spellcheck="false">
+      <button id="reditSearchBtn" class="btn" type="button"><span class="msr">search</span> Tandai</button>
+      <button id="reditUndo" class="btn icon-only" type="button" title="Urungkan terakhir" aria-label="Urungkan terakhir"><span class="msr">undo</span></button>
+      <button id="reditDelSel" class="btn icon-only" type="button" title="Hapus yang dipilih" aria-label="Hapus yang dipilih"><span class="msr">delete</span></button>
+      <button id="reditClear" class="btn icon-only" type="button" title="Hapus semua di halaman ini" aria-label="Hapus semua"><span class="msr">delete_sweep</span></button>
+      <span id="reditCount" class="stat"></span>
+    </div>
+    <div class="redit-canvaswrap"><canvas id="reditCanvas"></canvas></div>
+    <div class="modal-foot">
+      <button id="reditDone" class="btn btn-primary" type="button"><span class="msr">check</span> Selesai</button>
+    </div>
+  </div>
 </div>
 
 </main>

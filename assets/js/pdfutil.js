@@ -375,6 +375,69 @@
     ];
   }
 
+  /* ---------- samarkan (redact): cari teks & util rect (murni, bisa di-test) ---------- */
+
+  // boxes: [{str, x, y, w, h}] dalam satu sistem koordinat.
+  // Mengembalikan daftar rect gabungan per kemunculan query (case-insensitive,
+  // cocok lintas item teks yang terpecah).
+  function findTextRects(boxes, query) {
+    const q = String(query == null ? "" : query).trim().toLowerCase();
+    if (!q || !Array.isArray(boxes) || !boxes.length) return [];
+    let text = "";
+    const map = [];
+    boxes.forEach((b, bi) => {
+      const s = String((b && b.str) || "");
+      for (const ch of s) { text += ch; map.push(bi); }
+      text += " "; map.push(-1);
+    });
+    const t = text.toLowerCase();
+    const out = [];
+    let from = 0;
+    while (true) {
+      const idx = t.indexOf(q, from);
+      if (idx < 0) break;
+      const involved = [];
+      const seen = {};
+      for (let i = idx; i < idx + q.length; i++) {
+        const bi = map[i];
+        if (bi >= 0 && !seen[bi]) { seen[bi] = 1; involved.push(boxes[bi]); }
+      }
+      if (involved.length) out.push(unionRects(involved));
+      from = idx + q.length;
+    }
+    return out;
+  }
+
+  // Gabungkan beberapa rect jadi satu pembungkus.
+  function unionRects(rs) {
+    let x = Infinity, y = Infinity, x2 = -Infinity, y2 = -Infinity;
+    for (const r of rs) {
+      if (r.x < x) x = r.x;
+      if (r.y < y) y = r.y;
+      if (r.x + r.w > x2) x2 = r.x + r.w;
+      if (r.y + r.h > y2) y2 = r.y + r.h;
+    }
+    if (x === Infinity) return { x: 0, y: 0, w: 0, h: 0 };
+    return { x: x, y: y, w: Math.max(0, x2 - x), h: Math.max(0, y2 - y) };
+  }
+
+  // Normalisasi rect hasil drag (pastikan w,h >= 0).
+  function normRect(x1, y1, x2, y2) {
+    return { x: Math.min(x1, x2), y: Math.min(y1, y2), w: Math.abs(x2 - x1), h: Math.abs(y2 - y1) };
+  }
+
+  // Kalikan dua matriks transformasi 2D [a,b,c,d,e,f] (ala pdfjsLib.Util.transform).
+  function mulTransform(m1, m2) {
+    return [
+      m1[0] * m2[0] + m1[2] * m2[1],
+      m1[1] * m2[0] + m1[3] * m2[1],
+      m1[0] * m2[2] + m1[2] * m2[3],
+      m1[1] * m2[2] + m1[3] * m2[3],
+      m1[0] * m2[4] + m1[2] * m2[5] + m1[4],
+      m1[1] * m2[4] + m1[3] * m2[5] + m1[5],
+    ];
+  }
+
   /* ---------- preset satu-klik (murni, bisa di-test) ---------- */
 
   // key -> {quality, optimize}. Dipakai tombol preset di panel Gabung.
@@ -422,5 +485,9 @@
     HISTORY_MAX: HISTORY_MAX,
     listImageXObjects: listImageXObjects,
     decodeImagePixels: decodeImagePixels,
+    findTextRects: findTextRects,
+    unionRects: unionRects,
+    normRect: normRect,
+    mulTransform: mulTransform,
   };
 });
