@@ -377,12 +377,8 @@
 
   /* ---------- samarkan (redact): cari teks & util rect (murni, bisa di-test) ---------- */
 
-  // boxes: [{str, x, y, w, h}] dalam satu sistem koordinat.
-  // Mengembalikan daftar rect gabungan per kemunculan query (case-insensitive,
-  // cocok lintas item teks yang terpecah).
-  function findTextRects(boxes, query) {
-    const q = String(query == null ? "" : query).trim().toLowerCase();
-    if (!q || !Array.isArray(boxes) || !boxes.length) return [];
+  // Bangun teks gabungan + peta indeks char -> indeks box (untuk pencarian).
+  function buildTextMap(boxes) {
     let text = "";
     const map = [];
     boxes.forEach((b, bi) => {
@@ -390,20 +386,51 @@
       for (const ch of s) { text += ch; map.push(bi); }
       text += " "; map.push(-1);
     });
-    const t = text.toLowerCase();
+    return { text: text, map: map };
+  }
+
+  function rectsForRange(boxes, map, start, end) {
+    const involved = [];
+    const seen = {};
+    for (let i = start; i < end; i++) {
+      const bi = map[i];
+      if (bi >= 0 && !seen[bi]) { seen[bi] = 1; involved.push(boxes[bi]); }
+    }
+    return involved.length ? unionRects(involved) : null;
+  }
+
+  // boxes: [{str, x, y, w, h}] dalam satu sistem koordinat.
+  // Mengembalikan daftar rect gabungan per kemunculan query (case-insensitive,
+  // cocok lintas item teks yang terpecah).
+  function findTextRects(boxes, query) {
+    const q = String(query == null ? "" : query).trim().toLowerCase();
+    if (!q || !Array.isArray(boxes) || !boxes.length) return [];
+    const tm = buildTextMap(boxes);
+    const t = tm.text.toLowerCase();
     const out = [];
     let from = 0;
     while (true) {
       const idx = t.indexOf(q, from);
       if (idx < 0) break;
-      const involved = [];
-      const seen = {};
-      for (let i = idx; i < idx + q.length; i++) {
-        const bi = map[i];
-        if (bi >= 0 && !seen[bi]) { seen[bi] = 1; involved.push(boxes[bi]); }
-      }
-      if (involved.length) out.push(unionRects(involved));
+      const r = rectsForRange(boxes, tm.map, idx, idx + q.length);
+      if (r) out.push(r);
       from = idx + q.length;
+    }
+    return out;
+  }
+
+  // Sama seperti findTextRects, tapi dengan RegExp (untuk deteksi pola sensitif).
+  function findPatternRects(boxes, pattern) {
+    if (!Array.isArray(boxes) || !boxes.length || !pattern) return [];
+    const tm = buildTextMap(boxes);
+    const flags = pattern.flags.indexOf("g") >= 0 ? pattern.flags : pattern.flags + "g";
+    const re = new RegExp(pattern.source, flags);
+    const out = [];
+    let m;
+    while ((m = re.exec(tm.text)) !== null) {
+      if (!m[0].length) { re.lastIndex++; continue; }
+      const r = rectsForRange(boxes, tm.map, m.index, m.index + m[0].length);
+      if (r) out.push(r);
     }
     return out;
   }
@@ -486,6 +513,7 @@
     listImageXObjects: listImageXObjects,
     decodeImagePixels: decodeImagePixels,
     findTextRects: findTextRects,
+    findPatternRects: findPatternRects,
     unionRects: unionRects,
     normRect: normRect,
     mulTransform: mulTransform,

@@ -72,3 +72,37 @@ test("mulTransform: identitas & translasi", () => {
   const p = U.mulTransform(s, [1, 0, 0, 1, 5, 5]);
   assert.deepEqual([p[4], p[5]], [20, 30]);
 });
+
+test("findPatternRects: NIK 16 digit ketemu", () => {
+  const boxes = [
+    { str: "NIK", x: 0, y: 0, w: 30, h: 12 },
+    { str: ":", x: 32, y: 0, w: 8, h: 12 },
+    { str: "3174010101900001", x: 42, y: 0, w: 140, h: 12 },
+    { str: "telp", x: 0, y: 20, w: 30, h: 12 },
+  ];
+  const r = U.findPatternRects(boxes, /\b\d{16}\b/g);
+  assert.equal(r.length, 1);
+  assert.equal(r[0].x, 42);
+});
+
+test("findPatternRects: email & no HP", () => {
+  const boxes = [
+    { str: "hubungi", x: 0, y: 0, w: 60, h: 12 },
+    { str: "budi@mail.com", x: 62, y: 0, w: 110, h: 12 },
+    { str: "atau", x: 0, y: 20, w: 40, h: 12 },
+    { str: "081234567890", x: 42, y: 20, w: 110, h: 12 },
+  ];
+  const em = U.findPatternRects(boxes, /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g);
+  assert.equal(em.length, 1);
+  assert.equal(em[0].x, 62);
+  const hp = U.findPatternRects(boxes, /\b08\d{8,12}\b/g);
+  assert.equal(hp.length, 1);
+  assert.equal(hp[0].y, 20);
+});
+
+test("findPatternRects: tanpa flag g tetap jalan & tak cocok -> []", () => {
+  const boxes = [{ str: "abc 123", x: 0, y: 0, w: 50, h: 12 }];
+  const r = U.findPatternRects(boxes, /\d{3}/);
+  assert.equal(r.length, 1);
+  assert.deepEqual(U.findPatternRects(boxes, /\d{16}/g), []);
+});
