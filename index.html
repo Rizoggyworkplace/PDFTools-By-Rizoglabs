@@ -250,47 +250,51 @@
     <input id="redactFileInput" type="file" accept=".pdf,application/pdf" hidden>
   </section>
 
-  <div id="redactWork" class="split-work" hidden>
+  <div id="redactWork" hidden>
     <p class="split-fileinfo"><strong id="redactFileName"></strong> · <span id="redactPageCount"></span></p>
-    <div id="redactGrid" class="rgrid"></div>
-    <button id="redactApplyBtn" class="btn btn-primary btn-big" type="button"><span class="msr">ink_eraser</span> Samarkan &amp; Download</button>
-    <p id="redactResultInfo" class="result-info" hidden></p>
-    <p class="privacy"><span class="msr">lock</span> Area yang ditandai dibakar permanen jadi hitam — tidak bisa dikembalikan. Halaman tanpa tanda tetap asli (teks bisa diseleksi).</p>
+    <div class="redact-layout">
+      <div id="redactThumbs" class="rthumbs" aria-label="Daftar halaman"></div>
+      <div class="rmain">
+        <div class="rtoolbar" role="toolbar" aria-label="Alat samarkan">
+          <button id="rtoolPan" class="rtool" type="button" title="Geser tampilan" aria-label="Geser tampilan"><span class="msr">pan_tool</span></button>
+          <button id="rtoolDraw" class="rtool active" type="button" title="Tandai area sensitif" aria-label="Tandai area sensitif"><span class="msr">ink_eraser</span><span class="rtool-label">Samarkan</span></button>
+          <button id="rtoolErase" class="rtool" type="button" title="Hapus tanda (ketuk kotak)" aria-label="Hapus tanda"><span class="msr">ink_eraser_off</span></button>
+        </div>
+        <div id="redactCanvasWrap" class="rcanvaswrap"><canvas id="redactCanvas"></canvas></div>
+        <div class="rzoombar">
+          <button id="rzoomOut" class="icon-btn" type="button" aria-label="Perkecil"><span class="msr">remove</span></button>
+          <span id="redactZoomLabel" class="stat">100%</span>
+          <button id="rzoomIn" class="icon-btn" type="button" aria-label="Perbesar"><span class="msr">add</span></button>
+          <span id="redactPageLabel" class="stat"></span>
+        </div>
+      </div>
+      <aside class="rside">
+        <h2 class="rside-title">Samarkan PDF</h2>
+        <p class="rinfo"><span class="msr">info</span><span>Pilih dan cari teks untuk mulai menyamarkan konten sensitif.</span></p>
+        <h3 class="rside-h">Deteksi lanjutan:</h3>
+        <button id="redactSmartBtn" class="btn btn-smart" type="button"><span class="msr">auto_awesome</span> Penyamaran cerdas</button>
+        <p class="muted rnote">Otomatis menandai NIK, nomor HP, dan email di semua halaman.</p>
+        <h3 class="rside-h">Deteksi dasar:</h3>
+        <div class="rsearchrow">
+          <input id="redactSearchAll" class="text-input" type="text" placeholder="Teks pencarian" aria-label="Teks pencarian" autocomplete="off" spellcheck="false">
+          <button id="redactSearchAllBtn" class="btn" type="button" aria-label="Cari dan tandai"><span class="msr">search</span></button>
+        </div>
+        <button id="redactApplyBtn" class="btn btn-primary btn-big btn-block" type="button"><span class="msr">ink_eraser</span> Samarkan</button>
+        <p id="redactResultInfo" class="result-info" hidden></p>
+        <p class="privacy"><span class="msr">lock</span> Area yang ditandai dibakar permanen — tidak bisa dikembalikan. Halaman tanpa tanda tetap asli.</p>
+      </aside>
+    </div>
   </div>
 
   <section class="howto">
     <h2>Cara pakai — Samarkan</h2>
     <ol>
-      <li>Pilih 1 file PDF.</li>
-      <li>Ketuk halaman untuk menandai area sensitif (gambar kotak) atau cari teks untuk ditandai otomatis.</li>
-      <li>Tekan <strong>Samarkan &amp; Download</strong>.</li>
+      <li>Pilih 1 file PDF, lalu pilih halaman di kolom kiri.</li>
+      <li>Seret di halaman untuk menandai area, atau pakai <strong>Penyamaran cerdas</strong> / <strong>pencarian teks</strong>.</li>
+      <li>Tekan <strong>Samarkan</strong> untuk mengunduh hasilnya.</li>
     </ol>
   </section>
 
-</div>
-
-<div id="redactEditor" class="modal" hidden role="dialog" aria-modal="true" aria-label="Editor samarkan">
-  <div class="modal-card redit-card">
-    <div class="modal-head">
-      <div>
-        <div id="reditTitle" class="modal-title">Samarkan — Hal 1</div>
-        <div class="modal-sub">Seret di halaman untuk menandai area. Ketuk kotak untuk memilih lalu hapus.</div>
-      </div>
-      <button id="reditClose" class="icon-btn" type="button" aria-label="Tutup editor"><span class="msr">close</span></button>
-    </div>
-    <div class="redit-toolbar">
-      <input id="reditSearch" class="text-input" type="text" placeholder="Cari teks untuk ditandai…" aria-label="Cari teks" autocomplete="off" spellcheck="false">
-      <button id="reditSearchBtn" class="btn" type="button"><span class="msr">search</span> Tandai</button>
-      <button id="reditUndo" class="btn icon-only" type="button" title="Urungkan terakhir" aria-label="Urungkan terakhir"><span class="msr">undo</span></button>
-      <button id="reditDelSel" class="btn icon-only" type="button" title="Hapus yang dipilih" aria-label="Hapus yang dipilih"><span class="msr">delete</span></button>
-      <button id="reditClear" class="btn icon-only" type="button" title="Hapus semua di halaman ini" aria-label="Hapus semua"><span class="msr">delete_sweep</span></button>
-      <span id="reditCount" class="stat"></span>
-    </div>
-    <div class="redit-canvaswrap"><canvas id="reditCanvas"></canvas></div>
-    <div class="modal-foot">
-      <button id="reditDone" class="btn btn-primary" type="button"><span class="msr">check</span> Selesai</button>
-    </div>
-  </div>
 </div>
 
 </main>
