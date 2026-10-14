@@ -41,18 +41,21 @@
 
   /* ---------- tab Gabung / Pisah ---------- */
 
-  const tabMerge = $("tabMerge"), tabSplit = $("tabSplit"), tabCompress = $("tabCompress");
-  const paneMerge = $("paneMerge"), paneSplit = $("paneSplit"), paneCompress = $("paneCompress");
+  const tabMerge = $("tabMerge"), tabSplit = $("tabSplit"), tabCompress = $("tabCompress"), tabRedact = $("tabRedact");
+  const paneMerge = $("paneMerge"), paneSplit = $("paneSplit"), paneCompress = $("paneCompress"), paneRedact = $("paneRedact");
   tabMerge.addEventListener("click", () => switchTab("merge"));
   tabSplit.addEventListener("click", () => switchTab("split"));
   tabCompress.addEventListener("click", () => switchTab("compress"));
+  tabRedact.addEventListener("click", () => switchTab("redact"));
   function switchTab(which) {
     tabMerge.classList.toggle("active", which === "merge");
     tabSplit.classList.toggle("active", which === "split");
     tabCompress.classList.toggle("active", which === "compress");
+    tabRedact.classList.toggle("active", which === "redact");
     paneMerge.hidden = which !== "merge";
     paneSplit.hidden = which !== "split";
     paneCompress.hidden = which !== "compress";
+    paneRedact.hidden = which !== "redact";
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
@@ -949,6 +952,331 @@
     } finally {
       compressBtn.disabled = false;
       compressBtn.innerHTML = oldLabel;
+    }
+  });
+
+  /* ---------- fitur: samarkan (redact) ---------- */
+  // Kotak ditandai di editor (koordinat poin PDF, origin kiri-atas).
+  // Saat diterapkan: halaman bertanda di-raster 200dpi + kotak dibakar hitam permanen,
+  // halaman lain disalin apa adanya (vektor/teks utuh).
+
+  const redactState = { bytes: null, name: "", numPages: 0, boxes: {} }; // boxes: pageNum -> [{x,y,w,h}]
+  const redactDropzone = $("redactDropzone"), redactFileInput = $("redactFileInput"),
+    redactPickBtn = $("redactPickBtn"), redactWork = $("redactWork"),
+    redactFileName = $("redactFileName"), redactPageCount = $("redactPageCount"),
+    redactGrid = $("redactGrid"), redactApplyBtn = $("redactApplyBtn"),
+    redactResultInfo = $("redactResultInfo");
+
+  redactPickBtn.addEventListener("click", (e) => { e.stopPropagation(); redactFileInput.click(); });
+  redactDropzone.addEventListener("click", () => redactFileInput.click());
+  redactFileInput.addEventListener("change", () => { loadRedactFile(redactFileInput.files[0]); redactFileInput.value = ""; });
+  ["dragenter", "dragover"].forEach((ev) =>
+    redactDropzone.addEventListener(ev, (e) => { e.preventDefault(); redactDropzone.classList.add("dragover"); }));
+  ["dragleave", "drop"].forEach((ev) =>
+    redactDropzone.addEventListener(ev, (e) => { e.preventDefault(); redactDropzone.classList.remove("dragover"); }));
+  redactDropzone.addEventListener("drop", (e) => loadRedactFile(e.dataTransfer.files[0]));
+
+  async function loadRedactFile(file) {
+    if (!file) return;
+    if (!(/pdf$/i.test(file.type) || /\.pdf$/i.test(file.name))) { toast("Pilih file PDF"); return; }
+    try {
+      const bytes = new Uint8Array(await file.arrayBuffer());
+      const doc = await pdfjsLib.getDocument({ data: bytes.slice() }).promise;
+      const n = doc.numPages;
+      redactState.bytes = bytes; redactState.name = file.name;
+      redactState.numPages = n; redactState.boxes = {};
+      redactFileName.textContent = file.name;
+      redactPageCount.textContent = n + " halaman";
+      redactWork.hidden = false;
+      redactResultInfo.hidden = true;
+      await renderRedactGrid(doc);
+      doc.destroy();
+      toast("PDF dimuat: " + n + " halaman. Ketuk halaman untuk menandai.");
+    } catch (err) { console.error(err); toast("Gagal baca PDF"); }
+  }
+
+  async function renderRedactGrid(pdfDoc) {
+    redactGrid.innerHTML = "";
+    for (let n = 1; n <= redactState.numPages; n++) {
+      const page = await pdfDoc.getPage(n);
+      const vp0 = page.getViewport({ scale: 1 });
+      const scale = 160 / vp0.width;
+      const vp = page.getViewport({ scale });
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.ceil(vp.width); canvas.height = Math.ceil(vp.height);
+      const ctx = canvas.getContext("2d");
+      ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, canvas.width, canvas.height);
+      await page.render({ canvasContext: ctx, viewport: vp }).promise;
+      // bakar mini kotak yg sudah ditandai
+      const boxes = redactState.boxes[n] || [];
+      if (boxes.length) {
+        ctx.fillStyle = "#000";
+        for (const b of boxes) ctx.fillRect(b.x * scale, b.y * scale, b.w * scale, b.h * scale);
+      }
+      page.cleanup();
+      const card = document.createElement("div"); card.className = "rcard";
+      const img = document.createElement("img"); img.src = canvas.toDataURL("image/jpeg", 0.7); img.alt = "Halaman " + n;
+      const lab = document.createElement("div"); lab.className = "rlab"; lab.textContent = "Hal " + n;
+      card.appendChild(img); card.appendChild(lab);
+      if (boxes.length) {
+        const badge = document.createElement("span"); badge.className = "rbadge"; badge.textContent = boxes.length;
+        card.appendChild(badge);
+      }
+      card.addEventListener("click", () => openRedactEditor(n));
+      redactGrid.appendChild(card);
+    }
+  }
+
+  async function refreshRedactGrid() {
+    if (!redactState.bytes) return;
+    const doc = await pdfjsLib.getDocument({ data: redactState.bytes.slice() }).promise;
+    try { await renderRedactGrid(doc); } finally { doc.destroy(); }
+  }
+
+  /* ----- editor samarkan ----- */
+  const reditModal = $("redactEditor"), reditCanvas = $("reditCanvas"),
+    reditTitle = $("reditTitle"), reditSearch = $("reditSearch"), reditCount = $("reditCount");
+  const ed = { pageNum: 1, scale: 1, boxes: [], selected: -1, textBoxes: [], drag: null };
+
+  function reditBoxes() {
+    if (!redactState.boxes[ed.pageNum]) redactState.boxes[ed.pageNum] = [];
+    return redactState.boxes[ed.pageNum];
+  }
+
+  async function openRedactEditor(n) {
+    ed.pageNum = n; ed.selected = -1; ed.drag = null;
+    reditTitle.textContent = "Samarkan — Hal " + n;
+    reditSearch.value = "";
+    reditModal.hidden = false;
+    document.body.style.overflow = "hidden";
+    await renderEditorPage();
+  }
+  function closeRedactEditor() {
+    reditModal.hidden = true;
+    document.body.style.overflow = "";
+    refreshRedactGrid();
+  }
+  $("reditClose").addEventListener("click", closeRedactEditor);
+  $("reditDone").addEventListener("click", closeRedactEditor);
+
+  async function renderEditorPage() {
+    const doc = await pdfjsLib.getDocument({ data: redactState.bytes.slice() }).promise;
+    try {
+      const page = await doc.getPage(ed.pageNum);
+      const vp1 = page.getViewport({ scale: 1 });
+      ed.scale = Math.min(2, 680 / vp1.width);
+      const vp = page.getViewport({ scale: ed.scale });
+      reditCanvas.width = Math.ceil(vp.width); reditCanvas.height = Math.ceil(vp.height);
+      const ctx = reditCanvas.getContext("2d");
+      ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, reditCanvas.width, reditCanvas.height);
+      await page.render({ canvasContext: ctx, viewport: vp }).promise;
+      ed.textBoxes = await pageTextBoxes(page, vp, ed.scale);
+      page.cleanup();
+      edBg = document.createElement("canvas");
+      edBg.width = reditCanvas.width; edBg.height = reditCanvas.height;
+      edBg.getContext("2d").drawImage(reditCanvas, 0, 0);
+      paintEditor();
+    } finally { doc.destroy(); }
+  }
+
+  // Ambil posisi teks (dalam poin PDF, origin kiri-atas) untuk fitur cari.
+  async function pageTextBoxes(pdfjsPage, viewport, scale) {
+    const tc = await pdfjsPage.getTextContent();
+    const mctx = document.createElement("canvas").getContext("2d");
+    const out = [];
+    for (const it of tc.items) {
+      const s = it.str;
+      if (!s || !s.trim()) continue;
+      const tx = U.mulTransform(viewport.transform, it.transform);
+      const fontH = Math.hypot(tx[2], tx[3]) || 10;
+      mctx.font = fontH + "px sans-serif";
+      const w = Math.max(2, mctx.measureText(s).width);
+      out.push({ str: s, x: tx[4] / scale, y: (tx[5] - fontH) / scale, w: w / scale, h: (fontH * 1.3) / scale });
+    }
+    return out;
+  }
+
+  function drawEditor(ctx) {
+    ctx = ctx || reditCanvas.getContext("2d");
+    const boxes = reditBoxes();
+    boxes.forEach((b, i) => {
+      const x = b.x * ed.scale, y = b.y * ed.scale, w = b.w * ed.scale, h = b.h * ed.scale;
+      ctx.fillStyle = "rgba(0,0,0,0.55)";
+      ctx.fillRect(x, y, w, h);
+      ctx.lineWidth = i === ed.selected ? 3 : 2;
+      ctx.strokeStyle = i === ed.selected ? "#2563eb" : "#e11d48";
+      ctx.strokeRect(x, y, w, h);
+    });
+    if (ed.drag) {
+      const d = U.normRect(ed.drag.x1, ed.drag.y1, ed.drag.x2, ed.drag.y2);
+      ctx.setLineDash([6, 4]);
+      ctx.lineWidth = 2; ctx.strokeStyle = "#e11d48";
+      ctx.strokeRect(d.x * ed.scale, d.y * ed.scale, d.w * ed.scale, d.h * ed.scale);
+      ctx.setLineDash([]);
+    }
+    updateReditCount();
+  }
+
+  function updateReditCount() {
+    const n = reditBoxes().length;
+    reditCount.textContent = n ? n + " area ditandai" : "belum ada area";
+  }
+
+  // simpan background halaman agar paintEditor tak perlu render ulang pdf.js
+  let edBg = null;
+  function paintEditor() {
+    const ctx = reditCanvas.getContext("2d");
+    if (edBg) ctx.drawImage(edBg, 0, 0);
+    drawEditor(ctx);
+  }
+
+  function edPoint(e) {
+    const r = reditCanvas.getBoundingClientRect();
+    const px = (e.clientX - r.left) * (reditCanvas.width / r.width);
+    const py = (e.clientY - r.top) * (reditCanvas.height / r.height);
+    return { x: px / ed.scale, y: py / ed.scale };
+  }
+  function hitBox(p) {
+    const boxes = reditBoxes();
+    for (let i = boxes.length - 1; i >= 0; i--) {
+      const b = boxes[i];
+      if (p.x >= b.x && p.x <= b.x + b.w && p.y >= b.y && p.y <= b.y + b.h) return i;
+    }
+    return -1;
+  }
+
+  reditCanvas.addEventListener("pointerdown", (e) => {
+    e.preventDefault();
+    reditCanvas.setPointerCapture(e.pointerId);
+    const p = edPoint(e);
+    const hit = hitBox(p);
+    ed.drag = { x1: p.x, y1: p.y, x2: p.x, y2: p.y, maybeSelect: hit };
+    ed.selected = -1;
+  });
+  reditCanvas.addEventListener("pointermove", (e) => {
+    if (!ed.drag) return;
+    const p = edPoint(e);
+    ed.drag.x2 = p.x; ed.drag.y2 = p.y;
+    paintEditor();
+  });
+  reditCanvas.addEventListener("pointerup", (e) => {
+    if (!ed.drag) return;
+    const d = ed.drag; ed.drag = null;
+    const r = U.normRect(d.x1, d.y1, d.x2, d.y2);
+    if (r.w < 3 || r.h < 3) {
+      // klik: pilih kotak bila ada
+      const p = edPoint(e);
+      ed.selected = hitBox(p);
+      paintEditor();
+      return;
+    }
+    if (d.maybeSelect >= 0) { ed.selected = d.maybeSelect; paintEditor(); return; }
+    reditBoxes().push(r);
+    ed.selected = reditBoxes().length - 1;
+    paintEditor();
+  });
+
+  $("reditUndo").addEventListener("click", () => { reditBoxes().pop(); ed.selected = -1; paintEditor(); });
+  $("reditDelSel").addEventListener("click", () => {
+    if (ed.selected >= 0) { reditBoxes().splice(ed.selected, 1); ed.selected = -1; paintEditor(); }
+    else toast("Ketuk dulu kotak yang mau dihapus");
+  });
+  $("reditClear").addEventListener("click", () => {
+    if (!reditBoxes().length) return;
+    if (confirm("Hapus semua tanda di halaman ini?")) { reditBoxes().length = 0; ed.selected = -1; paintEditor(); }
+  });
+  document.addEventListener("keydown", (e) => {
+    if (reditModal.hidden) return;
+    if ((e.key === "Delete" || e.key === "Backspace") && ed.selected >= 0) {
+      e.preventDefault();
+      reditBoxes().splice(ed.selected, 1); ed.selected = -1; paintEditor();
+    }
+    if (e.key === "Escape") closeRedactEditor();
+  });
+
+  async function reditSearchGo() {
+    const q = reditSearch.value;
+    if (!q.trim()) { toast("Ketik dulu teks yang dicari"); return; }
+    const found = U.findTextRects(ed.textBoxes, q);
+    if (!found.length) { toast("Tidak ketemu: " + q.trim()); return; }
+    const boxes = reditBoxes();
+    let added = 0;
+    for (const r of found) {
+      const dup = boxes.some((b) =>
+        Math.abs(b.x - r.x) < 1 && Math.abs(b.y - r.y) < 1 && Math.abs(b.w - r.w) < 1 && Math.abs(b.h - r.h) < 1);
+      if (!dup) { boxes.push({ x: r.x - 1, y: r.y - 1, w: r.w + 2, h: r.h + 2 }); added++; }
+    }
+    paintEditor();
+    toast(added ? added + " kemunculan ditandai" : "Sudah ditandai semua");
+  }
+  $("reditSearchBtn").addEventListener("click", reditSearchGo);
+  reditSearch.addEventListener("keydown", (e) => { if (e.key === "Enter") reditSearchGo(); });
+
+  /* ----- terapkan samarkan ----- */
+  async function buildRedactedPdf() {
+    const src = await PDFLib.PDFDocument.load(redactState.bytes);
+    const out = await PDFLib.PDFDocument.create();
+    const doc = await pdfjsLib.getDocument({ data: redactState.bytes.slice() }).promise;
+    try {
+      for (let n = 1; n <= redactState.numPages; n++) {
+        const boxes = redactState.boxes[n] || [];
+        if (!boxes.length) {
+          const [cp] = await out.copyPages(src, [n - 1]);
+          out.addPage(cp);
+          continue;
+        }
+        const page = await doc.getPage(n);
+        const outScale = 200 / 72;
+        const vp = page.getViewport({ scale: outScale });
+        const canvas = document.createElement("canvas");
+        canvas.width = Math.ceil(vp.width); canvas.height = Math.ceil(vp.height);
+        const ctx = canvas.getContext("2d");
+        ctx.fillStyle = "#ffffff"; ctx.fillRect(0, 0, canvas.width, canvas.height);
+        await page.render({ canvasContext: ctx, viewport: vp }).promise;
+        page.cleanup();
+        ctx.fillStyle = "#000000";
+        const pad = 2 * outScale;
+        for (const b of boxes) {
+          ctx.fillRect(b.x * outScale - pad, b.y * outScale - pad, b.w * outScale + pad * 2, b.h * outScale + pad * 2);
+        }
+        const jpg = await out.embedJpg(canvas.toDataURL("image/jpeg", 0.85));
+        const pg = out.addPage([jpg.width, jpg.height]);
+        pg.drawImage(jpg, { x: 0, y: 0, width: jpg.width, height: jpg.height });
+      }
+    } finally { doc.destroy(); }
+    return out.save({ useObjectStreams: true });
+  }
+
+  redactApplyBtn.addEventListener("click", async () => {
+    if (!redactState.bytes) { toast("Pilih dulu file PDF-nya"); return; }
+    const marked = Object.keys(redactState.boxes).filter((k) => redactState.boxes[k].length).length;
+    if (!marked) { toast("Tandai dulu area yang mau disamarkan"); return; }
+    if (!confirm(marked + " halaman akan disamarkan permanen. Lanjut?")) return;
+    redactApplyBtn.disabled = true;
+    const oldLabel = redactApplyBtn.innerHTML;
+    redactApplyBtn.innerHTML = '<span class="msr">hourglass_top</span> Menyamarkan…';
+    redactResultInfo.hidden = true;
+    try {
+      const bytes = await buildRedactedPdf();
+      const before = redactState.bytes.length, after = bytes.length;
+      const outName = U.resolveFileName(redactState.name.replace(/\.pdf$/i, "") + "-disamarkan");
+      redactResultInfo.textContent = "Ukuran hasil: " + U.fmtSize(after) + " (sebelumnya " + U.fmtSize(before) + ")";
+      redactResultInfo.hidden = false;
+      addHistory({ name: outName, date: new Date().toISOString(), sizeBytes: after, pageCount: redactState.numPages, quality: "samarkan" });
+      const blob = new Blob([bytes], { type: "application/pdf" });
+      const frame = document.createElement("iframe"); frame.title = "Pratinjau " + outName;
+      openPreview({
+        title: "Pratinjau hasil samarkan",
+        sub: outName + " · " + marked + " halaman disamarkan",
+        bodyNode: frame, blob: blob, fileName: outName,
+        downloadLabel: '<span class="msr">download</span> Download',
+      });
+    } catch (err) {
+      console.error(err);
+      toast("Gagal menyamarkan");
+    } finally {
+      redactApplyBtn.disabled = false;
+      redactApplyBtn.innerHTML = oldLabel;
     }
   });
 
