@@ -39,6 +39,7 @@
 <nav class="tabs" aria-label="Mode">
   <button id="tabMerge" class="tab active" type="button"><span class="msr">merge</span> Gabung</button>
   <button id="tabSplit" class="tab" type="button"><span class="msr">content_cut</span> Pisah</button>
+  <button id="tabCompress" class="tab" type="button"><span class="msr">compress</span> Kompres</button>
 </nav>
 
 <main class="wrap">
@@ -181,6 +182,56 @@
       <li>Pilih 1 file PDF.</li>
       <li>Pilih metode: <strong>rentang custom</strong> (mis. 1-5, 8), <strong>tiap N halaman</strong>, atau <strong>tiap halaman</strong> jadi 1 file.</li>
       <li>Atur <strong>nama dasar file</strong>, lalu tekan <strong>Pisah &amp; Download ZIP</strong>.</li>
+    </ol>
+  </section>
+
+</div>
+
+<!-- ============ MODE KOMPRES ============ -->
+<div id="paneCompress" hidden>
+
+  <section id="compressDropzone" class="dropzone" aria-label="Area upload PDF untuk dikompres">
+    <div class="dz-icon"><span class="msr">compress</span></div>
+    <p class="dz-title"><strong>Tarik &amp; letakkan file PDF di sini</strong></p>
+    <p class="dz-sub">atau</p>
+    <button id="compressPickBtn" class="btn" type="button">Pilih PDF</button>
+    <p class="dz-hint">Bisa banyak file sekaligus</p>
+    <input id="compressFileInput" type="file" accept=".pdf,application/pdf" multiple hidden>
+  </section>
+
+  <div id="compressWork" class="split-work" hidden>
+    <ul id="compressFileList" class="cfile-list"></ul>
+
+    <div class="radio-col" role="radiogroup" aria-label="Tingkat kompresi">
+      <label class="radio-row">
+        <input type="radio" name="compressLevel" value="ekstrem">
+        <span><strong>Kompresi Ekstrem</strong><br>
+        <small class="muted">Ukuran sekecil mungkin. Cocok untuk arsip &amp; kirim cepat.</small></span>
+      </label>
+      <label class="radio-row">
+        <input type="radio" name="compressLevel" value="direkomendasikan" checked>
+        <span><strong>Kompresi yang Direkomendasikan</strong><br>
+        <small class="muted">Seimbang: jauh lebih kecil, kualitas tetap bagus.</small></span>
+      </label>
+      <label class="radio-row">
+        <input type="radio" name="compressLevel" value="ringan">
+        <span><strong>Kompresi Ringan</strong><br>
+        <small class="muted">Sedikit lebih kecil, kualitas hampir tak berubah.</small></span>
+      </label>
+    </div>
+
+    <button id="compressBtn" class="btn btn-primary btn-big" type="button"><span class="msr">compress</span> Kompres PDF</button>
+    <p id="compressProgress" class="result-info" hidden></p>
+    <div id="compressResults" class="cresults"></div>
+    <p class="privacy"><span class="msr">lock</span> Gambar dikompres ulang tanpa me-raster halaman — teks tetap bisa diseleksi. Semua proses di perangkatmu.</p>
+  </div>
+
+  <section class="howto">
+    <h2>Cara pakai — Kompres</h2>
+    <ol>
+      <li>Pilih satu atau beberapa file PDF.</li>
+      <li>Pilih tingkat kompresi: <strong>Ekstrem</strong>, <strong>Direkomendasikan</strong>, atau <strong>Ringan</strong>.</li>
+      <li>Tekan <strong>Kompres PDF</strong>, lalu unduh hasilnya satu per satu.</li>
     </ol>
   </section>
 

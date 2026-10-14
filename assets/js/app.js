@@ -41,15 +41,18 @@
 
   /* ---------- tab Gabung / Pisah ---------- */
 
-  const tabMerge = $("tabMerge"), tabSplit = $("tabSplit");
-  const paneMerge = $("paneMerge"), paneSplit = $("paneSplit");
-  tabMerge.addEventListener("click", () => switchTab(true));
-  tabSplit.addEventListener("click", () => switchTab(false));
-  function switchTab(merge) {
-    tabMerge.classList.toggle("active", merge);
-    tabSplit.classList.toggle("active", !merge);
-    paneMerge.hidden = !merge;
-    paneSplit.hidden = merge;
+  const tabMerge = $("tabMerge"), tabSplit = $("tabSplit"), tabCompress = $("tabCompress");
+  const paneMerge = $("paneMerge"), paneSplit = $("paneSplit"), paneCompress = $("paneCompress");
+  tabMerge.addEventListener("click", () => switchTab("merge"));
+  tabSplit.addEventListener("click", () => switchTab("split"));
+  tabCompress.addEventListener("click", () => switchTab("compress"));
+  function switchTab(which) {
+    tabMerge.classList.toggle("active", which === "merge");
+    tabSplit.classList.toggle("active", which === "split");
+    tabCompress.classList.toggle("active", which === "compress");
+    paneMerge.hidden = which !== "merge";
+    paneSplit.hidden = which !== "split";
+    paneCompress.hidden = which !== "compress";
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
@@ -733,6 +736,222 @@
     });
   });
 
+  /* ---------- fitur: kompres PDF (tanpa raster halaman) ---------- */
+  // Gambar di dalam PDF dikompres ulang jadi JPEG (kualitas + downscale per level).
+  // Teks & grafik vektor TIDAK disentuh -> tetap bisa diseleksi.
+
+  const COMPRESS_LEVELS = {
+    ekstrem:          { q: 0.50, maxDim: 1500, label: "Ekstrem" },
+    direkomendasikan: { q: 0.65, maxDim: 2200, label: "Direkomendasikan" },
+    ringan:           { q: 0.80, maxDim: 3000, label: "Ringan" },
+  };
+  const compressFiles = []; // {id, name, bytes}
+  let compressSeq = 0;
+
+  const compressDropzone = $("compressDropzone"), compressFileInput = $("compressFileInput"),
+    compressPickBtn = $("compressPickBtn"), compressWork = $("compressWork"),
+    compressFileList = $("compressFileList"), compressBtn = $("compressBtn"),
+    compressProgress = $("compressProgress"), compressResults = $("compressResults");
+
+  compressPickBtn.addEventListener("click", (e) => { e.stopPropagation(); compressFileInput.click(); });
+  compressDropzone.addEventListener("click", () => compressFileInput.click());
+  compressFileInput.addEventListener("change", () => { addCompressFiles(compressFileInput.files); compressFileInput.value = ""; });
+  ["dragenter", "dragover"].forEach((ev) =>
+    compressDropzone.addEventListener(ev, (e) => { e.preventDefault(); compressDropzone.classList.add("dragover"); }));
+  ["dragleave", "drop"].forEach((ev) =>
+    compressDropzone.addEventListener(ev, (e) => { e.preventDefault(); compressDropzone.classList.remove("dragover"); }));
+  compressDropzone.addEventListener("drop", (e) => addCompressFiles(e.dataTransfer.files));
+
+  async function addCompressFiles(list) {
+    let added = 0;
+    for (const file of list || []) {
+      if (!(/pdf$/i.test(file.type) || /\.pdf$/i.test(file.name))) { toast("Hanya file PDF: " + file.name); continue; }
+      try {
+        const bytes = new Uint8Array(await file.arrayBuffer());
+        if (bytes.length < 5 || String.fromCharCode(bytes[0], bytes[1], bytes[2], bytes[3], bytes[4]) !== "%PDF-") {
+          toast("Bukan PDF valid: " + file.name); continue;
+        }
+        compressFiles.push({ id: ++compressSeq, name: file.name, bytes: bytes });
+        added++;
+      } catch (err) { toast("Gagal baca: " + file.name); }
+    }
+    if (added) {
+      renderCompressList();
+      compressWork.hidden = false;
+      compressResults.innerHTML = "";
+      toast(added + " PDF ditambahkan");
+    }
+  }
+
+  function renderCompressList() {
+    compressFileList.innerHTML = "";
+    compressFiles.forEach((f) => {
+      const li = document.createElement("li");
+      const nm = document.createElement("span"); nm.className = "nm"; nm.textContent = f.name; nm.title = f.name;
+      const sz = document.createElement("span"); sz.className = "sz"; sz.textContent = U.fmtSize(f.bytes.length);
+      const rm = document.createElement("button"); rm.type = "button"; rm.className = "rm";
+      rm.innerHTML = '<span class="msr">close</span>'; rm.title = "Hapus"; rm.setAttribute("aria-label", "Hapus " + f.name);
+      rm.addEventListener("click", (e) => {
+        e.stopPropagation();
+        const i = compressFiles.findIndex((x) => x.id === f.id);
+        if (i >= 0) compressFiles.splice(i, 1);
+        renderCompressList();
+        if (!compressFiles.length) compressWork.hidden = true;
+      });
+      li.appendChild(nm); li.appendChild(sz); li.appendChild(rm);
+      compressFileList.appendChild(li);
+    });
+  }
+
+  function selectedCompressLevel() {
+    const el = document.querySelector('input[name="compressLevel"]:checked');
+    return el ? el.value : "direkomendasikan";
+  }
+  document.querySelectorAll('input[name="compressLevel"]').forEach((el) => {
+    el.addEventListener("change", saveSettings);
+  });
+
+  // Inflate raw deflate (untuk FlateDecode).
+  async function inflateDeflate(bytes) {
+    const ds = new DecompressionStream("deflate");
+    const s = new Blob([bytes]).stream().pipeThrough(ds);
+    return new Uint8Array(await new Response(s).arrayBuffer());
+  }
+
+  // JPEG bytes -> RGBA via ImageBitmap.
+  async function jpegToRgba(bytes) {
+    const bmp = await createImageBitmap(new Blob([bytes], { type: "image/jpeg" }));
+    const c = document.createElement("canvas"); c.width = bmp.width; c.height = bmp.height;
+    const x = c.getContext("2d"); x.drawImage(bmp, 0, 0);
+    const d = x.getImageData(0, 0, c.width, c.height);
+    bmp.close();
+    return { width: c.width, height: c.height, rgba: d.data };
+  }
+
+  // RGBA -> JPEG bytes (downscale bila perlu).
+  function rgbaToJpeg(rgba, w, h, tw, th, q) {
+    const src = document.createElement("canvas"); src.width = w; src.height = h;
+    src.getContext("2d").putImageData(new ImageData(rgba, w, h), 0, 0);
+    const c = document.createElement("canvas"); c.width = tw; c.height = th;
+    c.getContext("2d").drawImage(src, 0, 0, tw, th);
+    const bin = atob(c.toDataURL("image/jpeg", q).split(",")[1]);
+    const out = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+    return out;
+  }
+
+  // Inti kompresi: ganti stream gambar dengan JPEG terkompres.
+  async function compressPdfBytes(srcBytes, levelKey) {
+    const lv = COMPRESS_LEVELS[levelKey] || COMPRESS_LEVELS.direkomendasikan;
+    const doc = await PDFLib.PDFDocument.load(srcBytes);
+    const pageCount = doc.getPageCount();
+    const images = U.listImageXObjects(PDFLib, doc);
+    const protectedRefs = new Set();
+    for (const im of images) {
+      if (im.sMaskRef) protectedRefs.add(im.sMaskRef.toString());
+      if (im.maskRef) protectedRefs.add(im.maskRef.toString());
+    }
+    const N = PDFLib.PDFName;
+    let replaced = 0;
+    for (const im of images) {
+      try {
+        if (im.isMask || protectedRefs.has(im.ref.toString())) continue;
+        if (im.width < 8 || im.height < 8) continue;
+        const raw = im.stream.getContents();
+        if (!raw || !raw.length) continue;
+        let w, h, rgba;
+        if (im.filters.indexOf("DCTDecode") >= 0) {
+          const d = await jpegToRgba(raw);
+          w = d.width; h = d.height; rgba = d.rgba;
+        } else {
+          const d = await U.decodeImagePixels(PDFLib, raw, im, inflateDeflate);
+          w = d.width; h = d.height; rgba = d.rgba;
+        }
+        const scale = Math.min(1, lv.maxDim / Math.max(w, h));
+        const tw = Math.max(1, Math.round(w * scale)), th = Math.max(1, Math.round(h * scale));
+        const jpg = rgbaToJpeg(rgba, w, h, tw, th, lv.q);
+        if (jpg.length >= raw.length) continue; // hanya ganti bila lebih kecil
+        const nd = PDFLib.PDFDict.withContext(doc.context);
+        nd.set(N.of("Type"), N.of("XObject"));
+        nd.set(N.of("Subtype"), N.of("Image"));
+        nd.set(N.of("Width"), PDFLib.PDFNumber.of(tw));
+        nd.set(N.of("Height"), PDFLib.PDFNumber.of(th));
+        nd.set(N.of("ColorSpace"), N.of("DeviceRGB"));
+        nd.set(N.of("BitsPerComponent"), PDFLib.PDFNumber.of(8));
+        nd.set(N.of("Filter"), N.of("DCTDecode"));
+        const sm = im.dict.get(N.of("SMask")); if (sm) nd.set(N.of("SMask"), sm);
+        const ip = im.dict.get(N.of("Interpolate")); if (ip) nd.set(N.of("Interpolate"), ip);
+        doc.context.assign(im.ref, PDFLib.PDFRawStream.of(nd, jpg));
+        replaced++;
+      } catch (e) { /* gambar sulit -> biarkan aslinya */ }
+    }
+    const bytes = await doc.save({ useObjectStreams: true });
+    return { bytes: bytes, replaced: replaced, total: images.length, pageCount: pageCount };
+  }
+
+  function downloadBytes(bytes, name) {
+    const url = URL.createObjectURL(new Blob([bytes], { type: "application/pdf" }));
+    const a = document.createElement("a"); a.href = url; a.download = name;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 4000);
+  }
+
+  compressBtn.addEventListener("click", async () => {
+    if (!compressFiles.length) { toast("Pilih dulu file PDF-nya"); return; }
+    const level = selectedCompressLevel();
+    compressBtn.disabled = true;
+    const oldLabel = compressBtn.innerHTML;
+    compressResults.innerHTML = "";
+    try {
+      for (let i = 0; i < compressFiles.length; i++) {
+        const f = compressFiles[i];
+        compressProgress.hidden = false;
+        compressProgress.textContent = "Mengompres " + (i + 1) + "/" + compressFiles.length + ": " + f.name + "…";
+        let r;
+        try {
+          r = await compressPdfBytes(f.bytes, level);
+        } catch (err) {
+          console.error(err);
+          compressProgress.textContent = "Gagal: " + f.name + " (PDF terkunci?)";
+          continue;
+        }
+        const before = f.bytes.length, after = r.bytes.length;
+        const pct = before > 0 ? Math.round((1 - after / before) * 100) : 0;
+        const outName = U.resolveFileName(f.name.replace(/\.pdf$/i, "") + "-kompres");
+        addHistory({ name: outName, date: new Date().toISOString(), sizeBytes: after, pageCount: r.pageCount, quality: "kompres-" + level });
+
+        const card = document.createElement("div"); card.className = "cresult";
+        const top = document.createElement("div"); top.className = "cresult-top";
+        const nm = document.createElement("span"); nm.className = "nm"; nm.textContent = f.name; nm.title = f.name;
+        const badge = document.createElement("span"); badge.className = "cresult-badge" + (pct <= 0 ? " zero" : "");
+        badge.textContent = pct > 0 ? "hemat " + pct + "%" : (r.total ? "sudah optimal" : "tanpa gambar");
+        const sizes = document.createElement("div"); sizes.className = "cresult-sizes";
+        sizes.innerHTML = "<strong>" + U.fmtSize(before) + "</strong> → <strong>" + U.fmtSize(after) + "</strong>" +
+          (r.total ? " · " + r.replaced + "/" + r.total + " gambar dikompres" : "");
+        const acts = document.createElement("div"); acts.className = "cresult-actions";
+        const bPrev = document.createElement("button"); bPrev.type = "button"; bPrev.className = "btn";
+        bPrev.innerHTML = '<span class="msr">visibility</span> Pratinjau';
+        const bDown = document.createElement("button"); bDown.type = "button"; bDown.className = "btn btn-primary";
+        bDown.innerHTML = '<span class="msr">download</span> Download';
+        const blob = new Blob([r.bytes], { type: "application/pdf" });
+        bPrev.addEventListener("click", () => {
+          const frame = document.createElement("iframe"); frame.title = "Pratinjau " + outName;
+          openPreview({ title: "Pratinjau hasil kompres", sub: outName + " · " + U.fmtSize(after), bodyNode: frame, blob: blob, fileName: outName, downloadLabel: '<span class="msr">download</span> Download' });
+        });
+        bDown.addEventListener("click", () => downloadBytes(r.bytes, outName));
+        acts.appendChild(bPrev); acts.appendChild(bDown);
+        top.appendChild(nm); top.appendChild(badge);
+        card.appendChild(top); card.appendChild(sizes); card.appendChild(acts);
+        compressResults.appendChild(card);
+      }
+      compressProgress.textContent = "Selesai.";
+      saveSettings();
+    } finally {
+      compressBtn.disabled = false;
+      compressBtn.innerHTML = oldLabel;
+    }
+  });
+
   /* ---------- fitur: modal pratinjau ---------- */
 
   const previewModal = $("previewModal"), previewTitle = $("previewTitle"),
@@ -849,6 +1068,7 @@
         optimize: optimizeCheck.checked,
         pageNum: pageNumCheck.checked,
         pageNumPos: pageNumPos.value,
+        compressLevel: selectedCompressLevel(),
       }));
     } catch (e) {}
   }
@@ -863,6 +1083,10 @@
     if (typeof s.optimize === "boolean") optimizeCheck.checked = s.optimize;
     if (typeof s.pageNum === "boolean") pageNumCheck.checked = s.pageNum;
     if (s.pageNumPos === "center" || s.pageNumPos === "right") pageNumPos.value = s.pageNumPos;
+    if (s.compressLevel) {
+      const r = document.querySelector('input[name="compressLevel"][value="' + s.compressLevel + '"]');
+      if (r) r.checked = true;
+    }
   })();
   document.querySelectorAll('input[name="quality"]').forEach((el) => {
     el.addEventListener("change", () => { clearPresetActive(); saveSettings(); });

@@ -141,6 +141,240 @@
     return out;
   }
 
+  /* ---------- kompres PDF: baca & decode gambar (murni, bisa di-test) ---------- */
+  // Catatan: fungsi di sini TIDAK menyentuh DOM/canvas. Decode JPEG (DCTDecode)
+  // dilakukan pemanggil via ImageBitmap; inflate di-inject agar bisa di-test.
+
+  // Daftar semua XObject gambar di dokumen.
+  // -> [{ref, stream, dict, width, height, filters:[], colorSpace, bitsPerComponent,
+  //      isMask, sMaskRef, maskRef, hasDecode, decodeParms}]
+  function listImageXObjects(PDFLib, doc) {
+    const N = PDFLib.PDFName;
+    const out = [];
+    for (const [ref, obj] of doc.context.indirectObjects) {
+      if (!obj || !obj.dict || typeof obj.getContents !== "function") continue;
+      const dict = obj.dict;
+      const st = dict.get(N.of("Subtype"));
+      if (!st || st.toString() !== "/Image") continue;
+      const w = dict.get(N.of("Width")), h = dict.get(N.of("Height"));
+      const width = w && typeof w.asNumber === "function" ? w.asNumber() : 0;
+      const height = h && typeof h.asNumber === "function" ? h.asNumber() : 0;
+      if (!width || !height) continue;
+      const filters = [];
+      const f = dict.get(N.of("Filter"));
+      if (f) {
+        const arr = f instanceof PDFLib.PDFArray ? f.asArray() : [f];
+        for (const x of arr) if (x) filters.push(String(x.toString()).replace(/^\//, ""));
+      }
+      const bpcV = dict.get(N.of("BitsPerComponent"));
+      const bpc = bpcV && typeof bpcV.asNumber === "function" ? bpcV.asNumber() : 8;
+      const im = dict.get(N.of("ImageMask"));
+      const sMask = dict.get(N.of("SMask"));
+      const msk = dict.get(N.of("Mask"));
+      let dp = dict.get(N.of("DecodeParms"));
+      if (dp instanceof PDFLib.PDFRef) { try { dp = doc.context.lookup(dp); } catch (e) { dp = null; } }
+      if (dp instanceof PDFLib.PDFArray) {
+        const a = dp.asArray(); dp = a.length ? a[0] : null;
+        if (dp instanceof PDFLib.PDFRef) { try { dp = doc.context.lookup(dp); } catch (e) { dp = null; } }
+      }
+      out.push({
+        ref: ref, stream: obj, dict: dict,
+        width: width, height: height, filters: filters,
+        colorSpace: parseColorSpace(PDFLib, dict.get(N.of("ColorSpace"))),
+        bitsPerComponent: bpc,
+        isMask: !!(im && im.toString() === "true"),
+        sMaskRef: sMask instanceof PDFLib.PDFRef ? sMask : null,
+        maskRef: msk instanceof PDFLib.PDFRef ? msk : null,
+        hasDecode: !!dict.get(N.of("Decode")),
+        decodeParms: dp && typeof dp.get === "function" ? dp : null,
+      });
+    }
+    return out;
+  }
+
+  // -> {family:'rgb'|'gray'|'cmyk'|'indexed'|'unknown', base?, hival?, palette?}
+  function parseColorSpace(PDFLib, cs) {
+    if (!cs) return { family: "unknown" };
+    const s = cs.toString();
+    if (s === "/DeviceRGB" || s === "/CalRGB") return { family: "rgb" };
+    if (s === "/DeviceGray" || s === "/CalGray") return { family: "gray" };
+    if (s === "/DeviceCMYK") return { family: "cmyk" };
+    if (cs instanceof PDFLib.PDFArray) {
+      const a = cs.asArray();
+      const name = a.length && a[0] ? a[0].toString() : "";
+      if (name === "/Indexed" && a.length >= 4) {
+        const hival = a[2] && typeof a[2].asNumber === "function" ? a[2].asNumber() : 0;
+        const lookup = a[3];
+        let palette = null;
+        if (lookup) {
+          if (typeof lookup.getContents === "function") { try { palette = lookup.getContents(); } catch (e) {} }
+          else { const t = lookup.toString(); if (t.charAt(0) === "<") palette = hexToBytes(t.slice(1, t.length - 1)); }
+        }
+        return { family: "indexed", base: parseColorSpace(PDFLib, a[1]), hival: hival, palette: palette };
+      }
+    }
+    return { family: "unknown" };
+  }
+
+  function hexToBytes(hex) {
+    const h = String(hex).replace(/[^0-9a-fA-F]/g, "");
+    const out = new Uint8Array(Math.floor(h.length / 2));
+    for (let i = 0; i < out.length; i++) out[i] = parseInt(h.substr(i * 2, 2), 16);
+    return out;
+  }
+
+  // Decode isi stream gambar menjadi RGBA.
+  // rawBytes: isi stream mentah. inflate: async (Uint8Array)->Uint8Array (untuk FlateDecode).
+  // DCTDecode (JPEG) dilempar dengan pesan "NEED_JPEG" — pemanggil decode via ImageBitmap.
+  // -> Promise<{width, height, rgba:Uint8ClampedArray}>
+  async function decodeImagePixels(PDFLib, rawBytes, info, inflate) {
+    const filters = info.filters || [];
+    if (filters.indexOf("DCTDecode") >= 0) throw new Error("NEED_JPEG");
+    let data = rawBytes;
+    if (filters.indexOf("FlateDecode") >= 0) {
+      if (typeof inflate !== "function") throw new Error("inflate tidak tersedia");
+      data = await inflate(rawBytes);
+      data = undoPredictor(PDFLib, data, info);
+    } else if (filters.length) {
+      throw new Error("Filter tak didukung: " + filters.join("+"));
+    }
+    return samplesToRgba(data, info);
+  }
+
+  function numComponents(info) {
+    const f = (info.colorSpace || {}).family;
+    if (f === "rgb") return 3;
+    if (f === "gray") return 1;
+    if (f === "cmyk") return 4;
+    if (f === "indexed") return 1;
+    return 0;
+  }
+
+  // Kembalikan predictor (PNG/TIFF) pada data hasil inflate.
+  function undoPredictor(PDFLib, data, info) {
+    const N = PDFLib.PDFName;
+    const parms = info.decodeParms;
+    let predictor = 1;
+    if (parms) {
+      const pv = parms.get(N.of("Predictor"));
+      if (pv && typeof pv.asNumber === "function") predictor = pv.asNumber();
+    }
+    if (predictor === 1) return data;
+    const bpc = info.bitsPerComponent;
+    let columns = info.width, colors = numComponents(info);
+    if (parms) {
+      const c = parms.get(N.of("Columns")); if (c && typeof c.asNumber === "function") columns = c.asNumber();
+      const cc = parms.get(N.of("Colors")); if (cc && typeof cc.asNumber === "function") colors = cc.asNumber();
+    }
+    if (!columns || !colors || !bpc) throw new Error("parameter predictor tak lengkap");
+    const rowLen = Math.ceil((colors * bpc * columns) / 8);
+    if (predictor === 2) { // TIFF horizontal differencing (bpc 8)
+      if (bpc !== 8) throw new Error("TIFF predictor butuh bpc 8");
+      const out = new Uint8Array(data.length);
+      for (let r = 0; r < info.height; r++) {
+        for (let i = 0; i < rowLen; i++) {
+          const prev = i >= colors ? out[r * rowLen + i - colors] : 0;
+          out[r * rowLen + i] = (data[r * rowLen + i] + prev) & 255;
+        }
+      }
+      return out;
+    }
+    if (predictor < 10 || predictor > 15) throw new Error("predictor tak didukung: " + predictor);
+    const bpp = Math.max(1, Math.ceil((colors * bpc) / 8));
+    const out = new Uint8Array(info.height * rowLen);
+    let pos = 0;
+    for (let r = 0; r < info.height; r++) {
+      if (pos >= data.length) throw new Error("data predictor terpotong");
+      const f = data[pos++];
+      const row = data.subarray(pos, pos + rowLen); pos += rowLen;
+      if (row.length < rowLen) throw new Error("baris predictor terpotong");
+      const prev = r ? out.subarray((r - 1) * rowLen, r * rowLen) : null;
+      const cur = out.subarray(r * rowLen, (r + 1) * rowLen);
+      unfilterRow(f, row, prev, cur, bpp, rowLen);
+    }
+    return out;
+  }
+
+  function paeth(a, b, c) {
+    const p = a + b - c, pa = Math.abs(p - a), pb = Math.abs(p - b), pc = Math.abs(p - c);
+    return pa <= pb && pa <= pc ? a : (pb <= pc ? b : c);
+  }
+
+  function unfilterRow(f, row, prev, cur, bpp, len) {
+    let i, a, b, c;
+    if (f === 0) { cur.set(row); return; }
+    if (f === 1) { for (i = 0; i < len; i++) { a = i >= bpp ? cur[i - bpp] : 0; cur[i] = (row[i] + a) & 255; } return; }
+    if (f === 2) { for (i = 0; i < len; i++) { b = prev ? prev[i] : 0; cur[i] = (row[i] + b) & 255; } return; }
+    if (f === 3) { for (i = 0; i < len; i++) { a = i >= bpp ? cur[i - bpp] : 0; b = prev ? prev[i] : 0; cur[i] = (row[i] + ((a + b) >> 1)) & 255; } return; }
+    if (f === 4) { for (i = 0; i < len; i++) { a = i >= bpp ? cur[i - bpp] : 0; b = prev ? prev[i] : 0; c = (i >= bpp && prev) ? prev[i - bpp] : 0; cur[i] = (row[i] + paeth(a, b, c)) & 255; } return; }
+    throw new Error("filter baris PNG tak dikenal: " + f);
+  }
+
+  // Sampel mentah -> RGBA. Mendukung gray/rgb/cmyk/indexed, bpc 1/2/4/8.
+  function samplesToRgba(data, info) {
+    const w = info.width, h = info.height, bpc = info.bitsPerComponent;
+    const cs = info.colorSpace || { family: "unknown" };
+    if (info.hasDecode) throw new Error("Decode array tak didukung");
+    if (bpc !== 1 && bpc !== 2 && bpc !== 4 && bpc !== 8) throw new Error("bpc tak didukung: " + bpc);
+    const n = w * h;
+    const rgba = new Uint8ClampedArray(n * 4);
+    if (cs.family === "indexed") {
+      const pal = cs.palette, base = (cs.base || {}).family;
+      const comps = base === "rgb" ? 3 : base === "gray" ? 1 : base === "cmyk" ? 4 : 0;
+      if (!pal || !comps) throw new Error("palet indexed tak didukung");
+      let bitpos = 0;
+      for (let i = 0; i < n; i++) {
+        const idx = readBits(data, bitpos, bpc); bitpos += bpc;
+        if (idx > cs.hival) throw new Error("indeks palet di luar batas");
+        const o = idx * comps, j = i * 4;
+        if (base === "rgb") { rgba[j] = pal[o]; rgba[j + 1] = pal[o + 1]; rgba[j + 2] = pal[o + 2]; }
+        else if (base === "gray") { const v = pal[o]; rgba[j] = rgba[j + 1] = rgba[j + 2] = v; }
+        else { const q = cmykToRgb(pal[o] / 255, pal[o + 1] / 255, pal[o + 2] / 255, pal[o + 3] / 255); rgba[j] = q[0]; rgba[j + 1] = q[1]; rgba[j + 2] = q[2]; }
+        rgba[j + 3] = 255;
+      }
+      return { width: w, height: h, rgba: rgba };
+    }
+    const comps = cs.family === "rgb" ? 3 : cs.family === "gray" ? 1 : cs.family === "cmyk" ? 4 : 0;
+    if (!comps) throw new Error("ruang warna tak didukung: " + cs.family);
+    const max = (1 << bpc) - 1;
+    let bitpos = 0;
+    for (let i = 0; i < n; i++) {
+      const j = i * 4;
+      let r, g, b;
+      if (comps === 1) { const v = Math.round(readBits(data, bitpos, bpc) * 255 / max); bitpos += bpc; r = g = b = v; }
+      else if (comps === 3) {
+        r = Math.round(readBits(data, bitpos, bpc) * 255 / max); bitpos += bpc;
+        g = Math.round(readBits(data, bitpos, bpc) * 255 / max); bitpos += bpc;
+        b = Math.round(readBits(data, bitpos, bpc) * 255 / max); bitpos += bpc;
+      } else {
+        const c = readBits(data, bitpos, bpc) / max; bitpos += bpc;
+        const m = readBits(data, bitpos, bpc) / max; bitpos += bpc;
+        const y = readBits(data, bitpos, bpc) / max; bitpos += bpc;
+        const k = readBits(data, bitpos, bpc) / max; bitpos += bpc;
+        const q = cmykToRgb(c, m, y, k); r = q[0]; g = q[1]; b = q[2];
+      }
+      rgba[j] = r; rgba[j + 1] = g; rgba[j + 2] = b; rgba[j + 3] = 255;
+    }
+    return { width: w, height: h, rgba: rgba };
+  }
+
+  function readBits(data, bitpos, bpc) {
+    let v = 0;
+    for (let i = 0; i < bpc; i++) {
+      const p = bitpos + i;
+      v = (v << 1) | ((data[p >> 3] >> (7 - (p & 7))) & 1);
+    }
+    return v;
+  }
+
+  function cmykToRgb(c, m, y, k) {
+    return [
+      Math.round(255 * (1 - Math.min(1, c * (1 - k) + k))),
+      Math.round(255 * (1 - Math.min(1, m * (1 - k) + k))),
+      Math.round(255 * (1 - Math.min(1, y * (1 - k) + k))),
+    ];
+  }
+
   /* ---------- preset satu-klik (murni, bisa di-test) ---------- */
 
   // key -> {quality, optimize}. Dipakai tombol preset di panel Gabung.
@@ -186,5 +420,7 @@
     presetKeys: presetKeys,
     pushHistory: pushHistory,
     HISTORY_MAX: HISTORY_MAX,
+    listImageXObjects: listImageXObjects,
+    decodeImagePixels: decodeImagePixels,
   };
 });
