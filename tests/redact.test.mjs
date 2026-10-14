@@ -137,3 +137,29 @@ test("rectsOverlap & textUnderRect", () => {
   assert.equal(U.textUnderRect(tbs, { x: 0, y: 0, w: 110, h: 14 }), "Rahasia negara");
   assert.equal(U.textUnderRect(tbs, { x: 200, y: 200, w: 10, h: 10 }), "");
 });
+
+test("snapToTextBoxes: kotak manual jadi tight-box per kata", () => {
+  const tbs = [
+    { str: "35GSK_0035", x: 10, y: 10, w: 80, h: 12 },
+    { str: "DMT_SUCI", x: 95, y: 10, w: 70, h: 12 },
+    { str: "baris2", x: 10, y: 40, w: 50, h: 12 },
+  ];
+  const s = U.snapToTextBoxes(tbs, { x: 0, y: 0, w: 200, h: 25 });
+  assert.equal(s.length, 2);
+  assert.equal(s[0].text, "35GSK_0035");
+  assert.equal(s[0].x, 9); // pad 1
+  assert.equal(s[1].text, "DMT_SUCI");
+  assert.equal(U.snapToTextBoxes(tbs, { x: 300, y: 300, w: 10, h: 10 }), null);
+  assert.equal(U.snapToTextBoxes([{ str: "   ", x: 0, y: 0, w: 10, h: 10 }], { x: 0, y: 0, w: 20, h: 20 }), null);
+});
+
+test("findTextMatches: parts berisi tight-box per item", () => {
+  const boxes = [
+    { str: "Jadwal", x: 0, y: 0, w: 50, h: 12 },
+    { str: "ATP", x: 55, y: 0, w: 30, h: 12 },
+  ];
+  const m = U.findTextMatches(boxes, "jadwal atp");
+  assert.equal(m.length, 1);
+  assert.equal(m[0].parts.length, 2);
+  assert.equal(m[0].parts[0].x, -1);
+});

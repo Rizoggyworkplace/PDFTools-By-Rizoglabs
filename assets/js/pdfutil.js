@@ -389,22 +389,35 @@
     return { text: text, map: map };
   }
 
-  function rectsForRange(boxes, map, start, end) {
+  // Ubah rentang char -> {rect, text, parts} (teks yang cocok, spasi dirapikan).
+  // parts = tight-box per item teks (untuk render presisi per kata).
+  function matchToRectText(boxes, tm, start, end) {
     const involved = [];
     const seen = {};
     for (let i = start; i < end; i++) {
-      const bi = map[i];
+      const bi = tm.map[i];
       if (bi >= 0 && !seen[bi]) { seen[bi] = 1; involved.push(boxes[bi]); }
     }
-    return involved.length ? unionRects(involved) : null;
+    if (!involved.length) return null;
+    const r = unionRects(involved);
+    const text = tm.text.slice(start, end).replace(/\s+/g, " ").trim();
+    const parts = involved.map((b) => ({ x: b.x - 1, y: b.y - 1, w: b.w + 2, h: b.h + 2 }));
+    return { x: r.x, y: r.y, w: r.w, h: r.h, text: text, parts: parts };
   }
 
-  // Ubah rentang char -> {rect, text} (teks yang cocok, spasi dirapikan).
-  function matchToRectText(boxes, tm, start, end) {
-    const r = rectsForRange(boxes, tm.map, start, end);
-    if (!r) return null;
-    const text = tm.text.slice(start, end).replace(/\s+/g, " ").trim();
-    return { x: r.x, y: r.y, w: r.w, h: r.h, text: text };
+  // Snap sebuah rect ke item teks yang bersinggungan: kembalikan daftar
+  // tight-box per item (atau null bila tidak ada teks di bawahnya — mis. area gambar).
+  function snapToTextBoxes(textBoxes, rect, pad) {
+    if (!Array.isArray(textBoxes) || !rect) return null;
+    const p = pad == null ? 1 : pad;
+    const out = [];
+    for (const b of textBoxes) {
+      if (!b.str || !b.str.trim()) continue;
+      if (rectsOverlap(b, rect)) {
+        out.push({ x: b.x - p, y: b.y - p, w: b.w + p * 2, h: b.h + p * 2, text: String(b.str).trim() });
+      }
+    }
+    return out.length ? out : null;
   }
 
   // boxes: [{str, x, y, w, h}] dalam satu sistem koordinat.
@@ -552,6 +565,7 @@
     findPatternMatches: findPatternMatches,
     rectsOverlap: rectsOverlap,
     textUnderRect: textUnderRect,
+    snapToTextBoxes: snapToTextBoxes,
     unionRects: unionRects,
     normRect: normRect,
     mulTransform: mulTransform,
