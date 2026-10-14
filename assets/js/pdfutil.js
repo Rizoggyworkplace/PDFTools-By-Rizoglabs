@@ -399,10 +399,18 @@
     return involved.length ? unionRects(involved) : null;
   }
 
+  // Ubah rentang char -> {rect, text} (teks yang cocok, spasi dirapikan).
+  function matchToRectText(boxes, tm, start, end) {
+    const r = rectsForRange(boxes, tm.map, start, end);
+    if (!r) return null;
+    const text = tm.text.slice(start, end).replace(/\s+/g, " ").trim();
+    return { x: r.x, y: r.y, w: r.w, h: r.h, text: text };
+  }
+
   // boxes: [{str, x, y, w, h}] dalam satu sistem koordinat.
-  // Mengembalikan daftar rect gabungan per kemunculan query (case-insensitive,
-  // cocok lintas item teks yang terpecah).
-  function findTextRects(boxes, query) {
+  // Mengembalikan daftar kecocokan {x,y,w,h,text} per kemunculan query
+  // (case-insensitive, cocok lintas item teks yang terpecah).
+  function findTextMatches(boxes, query) {
     const q = String(query == null ? "" : query).trim().toLowerCase();
     if (!q || !Array.isArray(boxes) || !boxes.length) return [];
     const tm = buildTextMap(boxes);
@@ -412,15 +420,20 @@
     while (true) {
       const idx = t.indexOf(q, from);
       if (idx < 0) break;
-      const r = rectsForRange(boxes, tm.map, idx, idx + q.length);
-      if (r) out.push(r);
+      const m = matchToRectText(boxes, tm, idx, idx + q.length);
+      if (m) out.push(m);
       from = idx + q.length;
     }
     return out;
   }
 
-  // Sama seperti findTextRects, tapi dengan RegExp (untuk deteksi pola sensitif).
-  function findPatternRects(boxes, pattern) {
+  // Versi ringkas: hanya rect (kompatibel lama).
+  function findTextRects(boxes, query) {
+    return findTextMatches(boxes, query).map((m) => ({ x: m.x, y: m.y, w: m.w, h: m.h }));
+  }
+
+  // Sama seperti findTextMatches, tapi dengan RegExp (untuk deteksi pola sensitif).
+  function findPatternMatches(boxes, pattern) {
     if (!Array.isArray(boxes) || !boxes.length || !pattern) return [];
     const tm = buildTextMap(boxes);
     const flags = pattern.flags.indexOf("g") >= 0 ? pattern.flags : pattern.flags + "g";
@@ -429,10 +442,31 @@
     let m;
     while ((m = re.exec(tm.text)) !== null) {
       if (!m[0].length) { re.lastIndex++; continue; }
-      const r = rectsForRange(boxes, tm.map, m.index, m.index + m[0].length);
+      const r = matchToRectText(boxes, tm, m.index, m.index + m[0].length);
       if (r) out.push(r);
     }
     return out;
+  }
+
+  // Versi ringkas: hanya rect (kompatibel lama).
+  function findPatternRects(boxes, pattern) {
+    return findPatternMatches(boxes, pattern).map((m) => ({ x: m.x, y: m.y, w: m.w, h: m.h }));
+  }
+
+  // Apakah dua rect bersinggungan?
+  function rectsOverlap(a, b) {
+    return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
+  }
+
+  // Ambil teks di bawah sebuah rect (untuk kotak manual): gabung teks item yang bersinggungan.
+  function textUnderRect(textBoxes, rect, maxLen) {
+    if (!Array.isArray(textBoxes) || !rect) return "";
+    const hits = textBoxes.filter((b) => rectsOverlap(b, rect));
+    hits.sort((a, b) => (a.y - b.y) || (a.x - b.x));
+    let s = hits.map((b) => b.str).join(" ").replace(/\s+/g, " ").trim();
+    const ml = maxLen && maxLen > 0 ? maxLen : 120;
+    if (s.length > ml) s = s.slice(0, ml) + "…";
+    return s;
   }
 
   // Gabungkan beberapa rect jadi satu pembungkus.
@@ -514,6 +548,10 @@
     decodeImagePixels: decodeImagePixels,
     findTextRects: findTextRects,
     findPatternRects: findPatternRects,
+    findTextMatches: findTextMatches,
+    findPatternMatches: findPatternMatches,
+    rectsOverlap: rectsOverlap,
+    textUnderRect: textUnderRect,
     unionRects: unionRects,
     normRect: normRect,
     mulTransform: mulTransform,

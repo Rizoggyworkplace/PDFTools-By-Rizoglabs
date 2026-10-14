@@ -106,3 +106,34 @@ test("findPatternRects: tanpa flag g tetap jalan & tak cocok -> []", () => {
   assert.equal(r.length, 1);
   assert.deepEqual(U.findPatternRects(boxes, /\d{16}/g), []);
 });
+
+test("findTextMatches: mengembalikan teks yang cocok", () => {
+  const boxes = [
+    { str: "NIK", x: 0, y: 0, w: 30, h: 12 },
+    { str: "3174010101900001", x: 32, y: 0, w: 140, h: 12 },
+  ];
+  const m = U.findTextMatches(boxes, "nik 3174010101900001");
+  assert.equal(m.length, 1);
+  assert.equal(m[0].text, "NIK 3174010101900001");
+  assert.equal(m[0].x, 0);
+});
+
+test("findPatternMatches: teks pola ikut terbawa", () => {
+  const boxes = [{ str: "hubungi budi@mail.com ya", x: 0, y: 0, w: 200, h: 12 }];
+  const m = U.findPatternMatches(boxes, /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g);
+  assert.equal(m.length, 1);
+  assert.equal(m[0].text, "budi@mail.com");
+});
+
+test("rectsOverlap & textUnderRect", () => {
+  const a = { x: 0, y: 0, w: 10, h: 10 };
+  assert.equal(U.rectsOverlap(a, { x: 5, y: 5, w: 10, h: 10 }), true);
+  assert.equal(U.rectsOverlap(a, { x: 20, y: 20, w: 5, h: 5 }), false);
+  const tbs = [
+    { str: "Rahasia", x: 0, y: 0, w: 50, h: 12 },
+    { str: "negara", x: 52, y: 0, w: 50, h: 12 },
+    { str: "jauh", x: 0, y: 100, w: 40, h: 12 },
+  ];
+  assert.equal(U.textUnderRect(tbs, { x: 0, y: 0, w: 110, h: 14 }), "Rahasia negara");
+  assert.equal(U.textUnderRect(tbs, { x: 200, y: 200, w: 10, h: 10 }), "");
+});
