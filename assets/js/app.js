@@ -1099,10 +1099,12 @@
     if (redactState._bg) ctx.drawImage(redactState._bg, 0, 0);
     const s = redactState._scale || 1;
     for (const b of rBoxes()) {
-      ctx.fillStyle = "rgba(0,0,0,0.55)";
-      ctx.fillRect(b.x * s, b.y * s, b.w * s, b.h * s);
-      ctx.lineWidth = 2; ctx.strokeStyle = "#e11d48";
-      ctx.strokeRect(b.x * s, b.y * s, b.w * s, b.h * s);
+      for (const p of boxParts(b)) {
+        ctx.fillStyle = "rgba(0,0,0,0.55)";
+        ctx.fillRect(p.x * s, p.y * s, p.w * s, p.h * s);
+        ctx.lineWidth = 2; ctx.strokeStyle = "#e11d48";
+        ctx.strokeRect(p.x * s, p.y * s, p.w * s, p.h * s);
+      }
     }
     const d = redactState._drag;
     if (d) {
@@ -1176,9 +1178,19 @@
     if (!d) return;
     const r = U.normRect(d.x1, d.y1, d.x2, d.y2);
     if (r.w >= 3 && r.h >= 3) {
-      r.text = U.textUnderRect(redactState._textBoxes || [], r);
-      r.source = "manual";
-      rBoxes().push(r);
+      // Snap ke teks: pecah jadi tight-box per kata bila ada teks di bawahnya.
+      const snapped = U.snapToTextBoxes(redactState._textBoxes || [], r);
+      const list = rBoxes();
+      const addBox = (b) => {
+        const dup = list.some((x) =>
+          Math.abs(x.x - b.x) < 1 && Math.abs(x.y - b.y) < 1 && Math.abs(x.w - b.w) < 1 && Math.abs(x.h - b.h) < 1);
+        if (!dup) list.push(b);
+      };
+      if (snapped) {
+        for (const s of snapped) addBox({ x: s.x, y: s.y, w: s.w, h: s.h, text: s.text, source: "manual" });
+      } else {
+        addBox({ x: r.x, y: r.y, w: r.w, h: r.h, text: U.textUnderRect(redactState._textBoxes || [], r), source: "manual" });
+      }
       markActiveThumb(); renderMarkedList();
     }
     paintRedact();
@@ -1200,12 +1212,16 @@
     let added = 0;
     for (const m of matches) {
       const b = { x: m.x - 1, y: m.y - 1, w: m.w + 2, h: m.h + 2, text: m.text || "", source: source };
+      if (m.parts) b.parts = m.parts;
       const dup = redactState.boxes[n].some((x) =>
         Math.abs(x.x - b.x) < 1 && Math.abs(x.y - b.y) < 1 && Math.abs(x.w - b.w) < 1 && Math.abs(x.h - b.h) < 1);
       if (!dup) { redactState.boxes[n].push(b); added++; }
     }
     return added;
   }
+
+  // Kotak yang digambar: pakai parts (tight per kata) bila ada.
+  function boxParts(b) { return b.parts && b.parts.length ? b.parts : [b]; }
 
   // Daftar "ditandai untuk disamarkan" di panel kanan (teks terlihat, bisa hapus satuan).
   function renderMarkedList() {
@@ -1319,7 +1335,9 @@
         ctx.fillStyle = "#000000";
         const pad = 2 * outScale;
         for (const b of boxes) {
-          ctx.fillRect(b.x * outScale - pad, b.y * outScale - pad, b.w * outScale + pad * 2, b.h * outScale + pad * 2);
+          for (const p of (b.parts && b.parts.length ? b.parts : [b])) {
+            ctx.fillRect(p.x * outScale - pad, p.y * outScale - pad, p.w * outScale + pad * 2, p.h * outScale + pad * 2);
+          }
         }
         const jpg = await out.embedJpg(canvas.toDataURL("image/jpeg", 0.85));
         const pg = out.addPage([jpg.width, jpg.height]);
