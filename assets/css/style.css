@@ -381,6 +381,15 @@ h2 .msr{font-size:1.35rem}
 .rsearchrow{display:flex;gap:8px;margin-bottom:16px}
 .rsearchrow .text-input{flex:1;min-width:0}
 .btn-block{width:100%;margin:2px 0 6px}
+.rmarked-head{display:flex;align-items:center;justify-content:space-between;margin:4px 0 8px}
+.rmarked-head .rside-h{margin:0}
+.link-btn{background:none;border:none;color:var(--ink);text-decoration:underline;font-size:.78rem;cursor:pointer;font-family:inherit;padding:4px}
+#redactMarkedList{display:flex;flex-direction:column;gap:8px;max-height:264px;overflow-y:auto;margin-bottom:14px}
+.rmarked-page{font-size:.8rem;font-weight:700;color:var(--muted);margin-top:2px}
+.rmarked-item{display:flex;align-items:center;gap:10px;border:1px solid var(--line);border-radius:12px;padding:10px 12px;background:var(--bg)}
+.rmarked-item > .msr{color:var(--accent);font-size:1.25rem;flex:none}
+.rmarked-text{flex:1;font-size:.8rem;line-height:1.45;word-break:break-word}
+.rmarked-x{flex:none;min-width:30px;height:30px;padding:0 5px}
 [data-theme="dark"] .rinfo{background:#172554;border-color:#3730a3;color:#c7d2fe}
 [data-theme="dark"] .btn-smart{background:#2e1065;border-color:#7c3aed;color:#c4b5fd}
 [data-theme="dark"] .rthumb{background:#1a2638}

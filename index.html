@@ -279,6 +279,13 @@
           <input id="redactSearchAll" class="text-input" type="text" placeholder="Teks pencarian" aria-label="Teks pencarian" autocomplete="off" spellcheck="false">
           <button id="redactSearchAllBtn" class="btn" type="button" aria-label="Cari dan tandai"><span class="msr">search</span></button>
         </div>
+        <div id="redactMarkedWrap" hidden>
+          <div class="rmarked-head">
+            <h3 class="rside-h">Ditandai untuk disamarkan</h3>
+            <button id="redactClearAll" class="link-btn" type="button">Hapus semua</button>
+          </div>
+          <div id="redactMarkedList"></div>
+        </div>
         <button id="redactApplyBtn" class="btn btn-primary btn-big btn-block" type="button"><span class="msr">ink_eraser</span> Samarkan</button>
         <p id="redactResultInfo" class="result-info" hidden></p>
         <p class="privacy"><span class="msr">lock</span> Area yang ditandai dibakar permanen — tidak bisa dikembalikan. Halaman tanpa tanda tetap asli.</p>
