@@ -646,17 +646,19 @@
   /* ---------- tanda tangan ---------- */
 
   // Rect tanda tangan (koordinat PDF, origin kiri-bawah) dari ukuran gambar & posisi.
+  // Tinggi dibatasi (tanda tangan vertikal tidak boleh jadi raksasa).
   function signatureRect(pageW, pageH, imgW, imgH, pos, width, margin) {
     const m = margin == null ? 36 : Number(margin) || 0;
-    const w = Math.max(20, Math.min(pageW - m * 2, Number(width) || 150));
-    const h = Math.max(10, (w * imgH) / Math.max(1, imgW));
+    let w = Math.max(20, Math.min(pageW - m * 2, Number(width) || 150));
+    let h = Math.max(10, (w * imgH) / Math.max(1, imgW));
+    if (h > 150) { h = 150; w = Math.max(20, (h * imgW) / Math.max(1, imgH)); }
     let x = m;
     if (pos === "center") x = (pageW - w) / 2;
     else if (pos === "right") x = pageW - w - m;
     return { x: x, y: m, w: w, h: h };
   }
 
-  // opts: {page: 1-based, pos, width, margin}
+  // opts: {page: 1-based, rect:{x,y,w,h}} atau {page, pos, width, margin}
   async function applySignature(PDFLib, srcBytes, pngBytes, opts) {
     const o = opts || {};
     const doc = await PDFLib.PDFDocument.load(srcBytes);
@@ -664,7 +666,17 @@
     const n = Math.max(1, Math.min(doc.getPageCount(), Number(o.page) || 1));
     const pg = doc.getPage(n - 1);
     const sz = pg.getSize();
-    const r = signatureRect(sz.width, sz.height, img.width, img.height, o.pos || "right", o.width || 150, o.margin == null ? 36 : o.margin);
+    let r;
+    if (o.rect && Number(o.rect.w) > 0 && Number(o.rect.h) > 0) {
+      r = {
+        x: Math.max(0, Math.min(sz.width - 1, Number(o.rect.x) || 0)),
+        y: Math.max(0, Math.min(sz.height - 1, Number(o.rect.y) || 0)),
+        w: Math.max(1, Math.min(sz.width, Number(o.rect.w))),
+        h: Math.max(1, Math.min(sz.height, Number(o.rect.h))),
+      };
+    } else {
+      r = signatureRect(sz.width, sz.height, img.width, img.height, o.pos || "right", o.width || 150, o.margin == null ? 36 : o.margin);
+    }
     pg.drawImage(img, { x: r.x, y: r.y, width: r.w, height: r.h });
     return doc.save({ useObjectStreams: true });
   }

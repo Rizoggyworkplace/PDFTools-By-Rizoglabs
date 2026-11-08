@@ -133,6 +133,11 @@ test("signatureRect: posisi kiri/tengah/kanan di bawah halaman", () => {
   const big = U.signatureRect(200, 200, 300, 100, "right", 500, 10);
   assert.equal(big.w, 180);
   assert.equal(big.x, 10);
+  // tanda tangan vertikal: tinggi dibatasi 150 pt, lebar ikut mengecil
+  const tall = U.signatureRect(595, 842, 100, 300, "right", 150, 36);
+  assert.equal(tall.h, 150);
+  assert.ok(Math.abs(tall.w - 50) < 0.001);
+  assert.equal(tall.x, 595 - tall.w - 36);
 });
 
 test("applySignature: menempel di halaman yang dipilih", async () => {
@@ -144,6 +149,13 @@ test("applySignature: menempel di halaman yang dipilih", async () => {
   // halaman di luar jangkauan dijepit ke halaman terakhir
   const out2 = await U.applySignature(pdfLib, src, pngBytes, { page: 99 });
   assert.equal((await PDFDocument.load(out2)).getPageCount(), 2);
+});
+
+test("applySignature: rect bebas dipakai apa adanya", async () => {
+  const src = await makePdf([[595, 842]]);
+  const out = await U.applySignature(pdfLib, src, pngBytes, { page: 1, rect: { x: 100, y: 200, w: 120, h: 40 } });
+  assert.equal((await PDFDocument.load(out)).getPageCount(), 1);
+  assert.ok(out.length > src.length);
 });
 
 /* ---------- PDF ke gambar ---------- */
