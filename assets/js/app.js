@@ -41,21 +41,35 @@
 
   /* ---------- tab Gabung / Pisah ---------- */
 
-  const tabMerge = $("tabMerge"), tabSplit = $("tabSplit"), tabCompress = $("tabCompress"), tabRedact = $("tabRedact");
-  const paneMerge = $("paneMerge"), paneSplit = $("paneSplit"), paneCompress = $("paneCompress"), paneRedact = $("paneRedact");
+  const tabMerge = $("tabMerge"), tabSplit = $("tabSplit"), tabCompress = $("tabCompress"), tabRedact = $("tabRedact"),
+    tabOrganize = $("tabOrganize"), tabWatermark = $("tabWatermark"), tabSign = $("tabSign"), tabToImage = $("tabToImage");
+  const paneMerge = $("paneMerge"), paneSplit = $("paneSplit"), paneCompress = $("paneCompress"), paneRedact = $("paneRedact"),
+    paneOrganize = $("paneOrganize"), paneWatermark = $("paneWatermark"), paneSign = $("paneSign"), paneToImage = $("paneToImage");
   tabMerge.addEventListener("click", () => switchTab("merge"));
   tabSplit.addEventListener("click", () => switchTab("split"));
   tabCompress.addEventListener("click", () => switchTab("compress"));
   tabRedact.addEventListener("click", () => switchTab("redact"));
+  tabOrganize.addEventListener("click", () => switchTab("organize"));
+  tabWatermark.addEventListener("click", () => switchTab("watermark"));
+  tabSign.addEventListener("click", () => switchTab("sign"));
+  tabToImage.addEventListener("click", () => switchTab("toimage"));
   function switchTab(which) {
     tabMerge.classList.toggle("active", which === "merge");
     tabSplit.classList.toggle("active", which === "split");
     tabCompress.classList.toggle("active", which === "compress");
     tabRedact.classList.toggle("active", which === "redact");
+    tabOrganize.classList.toggle("active", which === "organize");
+    tabWatermark.classList.toggle("active", which === "watermark");
+    tabSign.classList.toggle("active", which === "sign");
+    tabToImage.classList.toggle("active", which === "toimage");
     paneMerge.hidden = which !== "merge";
     paneSplit.hidden = which !== "split";
     paneCompress.hidden = which !== "compress";
     paneRedact.hidden = which !== "redact";
+    paneOrganize.hidden = which !== "organize";
+    paneWatermark.hidden = which !== "watermark";
+    paneSign.hidden = which !== "sign";
+    paneToImage.hidden = which !== "toimage";
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
@@ -1522,6 +1536,605 @@
   optimizeCheck.addEventListener("change", () => { clearPresetActive(); saveSettings(); });
   pageNumCheck.addEventListener("change", saveSettings);
   pageNumPos.addEventListener("change", saveSettings);
+
+  /* ---------- fitur: atur halaman ---------- */
+  // Susun ulang / putar / hapus halaman satu PDF, lalu unduh hasilnya.
+
+  const orgState = { bytes: null, name: "", numPages: 0, pages: [] }; // pages: [{src:0-based, rot, deleted, thumbUrl}]
+  const orgDropzone = $("orgDropzone"), orgFileInput = $("orgFileInput"),
+    orgPickBtn = $("orgPickBtn"), orgWork = $("orgWork"),
+    orgFileName = $("orgFileName"), orgPageCount = $("orgPageCount"),
+    orgGrid = $("orgGrid"), orgStat = $("orgStat"),
+    orgResetBtn = $("orgResetBtn"), orgApplyBtn = $("orgApplyBtn"),
+    orgResultInfo = $("orgResultInfo");
+
+  orgPickBtn.addEventListener("click", (e) => { e.stopPropagation(); orgFileInput.click(); });
+  orgDropzone.addEventListener("click", () => orgFileInput.click());
+  orgFileInput.addEventListener("change", () => { loadOrgFile(orgFileInput.files[0]); orgFileInput.value = ""; });
+  ["dragenter", "dragover"].forEach((ev) =>
+    orgDropzone.addEventListener(ev, (e) => { e.preventDefault(); orgDropzone.classList.add("dragover"); }));
+  ["dragleave", "drop"].forEach((ev) =>
+    orgDropzone.addEventListener(ev, (e) => { e.preventDefault(); orgDropzone.classList.remove("dragover"); }));
+  orgDropzone.addEventListener("drop", (e) => loadOrgFile(e.dataTransfer.files[0]));
+
+  async function loadOrgFile(file) {
+    if (!file) return;
+    if (!(/pdf$/i.test(file.type) || /\.pdf$/i.test(file.name))) { toast("Pilih file PDF"); return; }
+    try {
+      const bytes = new Uint8Array(await file.arrayBuffer());
+      const doc = await pdfjsLib.getDocument({ data: bytes.slice() }).promise;
+      const n = doc.numPages;
+      const pages = [];
+      for (let i = 1; i <= n; i++) {
+        const page = await doc.getPage(i);
+        const vp0 = page.getViewport({ scale: 1 });
+        const vp = page.getViewport({ scale: 150 / vp0.width });
+        const canvas = document.createElement("canvas");
+        canvas.width = Math.ceil(vp.width); canvas.height = Math.ceil(vp.height);
+        const ctx = canvas.getContext("2d");
+        ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, canvas.width, canvas.height);
+        await page.render({ canvasContext: ctx, viewport: vp }).promise;
+        page.cleanup();
+        pages.push({ src: i - 1, rot: 0, deleted: false, thumbUrl: canvas.toDataURL("image/jpeg", 0.72) });
+      }
+      doc.destroy();
+      Object.assign(orgState, { bytes: bytes, name: file.name, numPages: n, pages: pages });
+      orgFileName.textContent = file.name;
+      orgPageCount.textContent = n + " halaman";
+      orgWork.hidden = false;
+      orgResultInfo.hidden = true;
+      renderOrgGrid();
+      toast("PDF dimuat: " + n + " halaman");
+    } catch (err) { console.error(err); toast("Gagal baca PDF"); }
+  }
+
+  function orgRemaining() { return orgState.pages.filter((p) => !p.deleted).length; }
+
+  function renderOrgGrid() {
+    orgGrid.innerHTML = "";
+    orgStat.textContent = orgState.pages.length + " halaman · " + orgRemaining() + " tersisa";
+    orgState.pages.forEach((p, idx) => {
+      const card = document.createElement("div");
+      card.className = "page-card" + (p.deleted ? " deleted" : " included");
+      card.draggable = !p.deleted;
+      card.dataset.src = p.src;
+      const img = document.createElement("img");
+      img.className = "thumb"; img.src = p.thumbUrl; img.alt = "Halaman " + (p.src + 1); img.draggable = false;
+      card.appendChild(img);
+      const badge = document.createElement("div");
+      badge.className = "badge-del"; badge.textContent = "dihapus";
+      card.appendChild(badge);
+      const rotBadge = document.createElement("div");
+      rotBadge.className = "rot-badge" + (p.rot ? " on" : "");
+      rotBadge.innerHTML = p.rot ? '<span class="msr">rotate_right</span>' + p.rot + "°" : "";
+      card.appendChild(rotBadge);
+      const movers = document.createElement("div");
+      movers.className = "movers";
+      if (!p.deleted) {
+        movers.appendChild(iconBtn("arrow_back", "Geser kiri", () => orgMove(idx, -1)));
+        movers.appendChild(iconBtn("arrow_forward", "Geser kanan", () => orgMove(idx, 1)));
+        movers.appendChild(iconBtn("rotate_left", "Putar 90° ke kiri", () => { p.rot = U.normalizeRotation(p.rot - 90); renderOrgGrid(); }));
+        movers.appendChild(iconBtn("rotate_right", "Putar 90° ke kanan", () => { p.rot = U.normalizeRotation(p.rot + 90); renderOrgGrid(); }));
+        movers.appendChild(iconBtn("delete", "Hapus halaman ini", () => { p.deleted = true; renderOrgGrid(); }));
+      } else {
+        movers.appendChild(iconBtn("undo", "Kembalikan halaman ini", () => { p.deleted = false; renderOrgGrid(); }));
+      }
+      card.appendChild(movers);
+      const meta = document.createElement("div");
+      meta.className = "page-meta";
+      meta.innerHTML = "Hal " + (p.src + 1) + (p.rot ? ' · <span class="msr">rotate_right</span>' + p.rot + "°" : "");
+      card.appendChild(meta);
+      card.addEventListener("dragstart", (e) => {
+        if (p.deleted) { e.preventDefault(); return; }
+        e.dataTransfer.setData("text/plain", "org:" + idx);
+        e.dataTransfer.effectAllowed = "move";
+        card.classList.add("dragging");
+      });
+      card.addEventListener("dragend", () => {
+        card.classList.remove("dragging");
+        orgGrid.querySelectorAll(".drop-target").forEach((el) => el.classList.remove("drop-target"));
+      });
+      card.addEventListener("dragover", (e) => { e.preventDefault(); card.classList.add("drop-target"); });
+      card.addEventListener("dragleave", () => card.classList.remove("drop-target"));
+      card.addEventListener("drop", (e) => {
+        e.preventDefault();
+        const raw = e.dataTransfer.getData("text/plain");
+        if (raw && raw.indexOf("org:") === 0) {
+          const from = +raw.slice(4);
+          if (from !== idx && !orgState.pages[from].deleted) {
+            const mv = orgState.pages.splice(from, 1)[0];
+            orgState.pages.splice(idx, 0, mv);
+            renderOrgGrid();
+          }
+        }
+      });
+      orgGrid.appendChild(card);
+    });
+  }
+
+  function orgMove(idx, dir) {
+    const j = idx + dir;
+    if (j < 0 || j >= orgState.pages.length) return;
+    const tmp = orgState.pages[idx]; orgState.pages[idx] = orgState.pages[j]; orgState.pages[j] = tmp;
+    renderOrgGrid();
+  }
+
+  orgResetBtn.addEventListener("click", () => {
+    if (!orgState.pages.length) return;
+    orgState.pages.sort((a, b) => a.src - b.src);
+    orgState.pages.forEach((p) => { p.rot = 0; p.deleted = false; });
+    renderOrgGrid();
+    toast("Di-reset ke urutan awal");
+  });
+
+  orgApplyBtn.addEventListener("click", async () => {
+    if (!orgState.bytes) { toast("Pilih dulu file PDF-nya"); return; }
+    const plan = U.planFromPages(orgState.pages);
+    if (!plan.length) { toast("Tidak ada halaman tersisa — kembalikan dulu halamannya"); return; }
+    orgApplyBtn.disabled = true;
+    const oldLabel = orgApplyBtn.innerHTML;
+    orgApplyBtn.innerHTML = "⏳ Menyusun…";
+    orgResultInfo.hidden = true;
+    try {
+      const bytes = await U.applyPagePlan(PDFLib, orgState.bytes, plan);
+      const outName = U.resolveFileName(orgState.name.replace(/\.pdf$/i, "") + "-diatur");
+      orgResultInfo.textContent = "Ukuran hasil: " + U.fmtSize(bytes.length) + " · " + plan.length + " halaman";
+      orgResultInfo.hidden = false;
+      addHistory({ name: outName, date: new Date().toISOString(), sizeBytes: bytes.length, pageCount: plan.length, quality: "atur-halaman" });
+      const blob = new Blob([bytes], { type: "application/pdf" });
+      const frame = document.createElement("iframe"); frame.title = "Pratinjau " + outName;
+      openPreview({
+        title: "Pratinjau hasil atur halaman",
+        sub: outName + " · " + plan.length + " halaman",
+        bodyNode: frame, blob: blob, fileName: outName,
+        downloadLabel: '<span class="msr">download</span> Download',
+      });
+      toast("Berhasil! " + plan.length + " halaman disusun.");
+    } catch (err) { console.error(err); toast("Gagal menyusun halaman"); }
+    finally { orgApplyBtn.disabled = false; orgApplyBtn.innerHTML = oldLabel; }
+  });
+
+  /* ---------- fitur: watermark ---------- */
+
+  const WM_COLORS = {
+    gray: [0.5, 0.5, 0.5],
+    red: [0.85, 0.15, 0.2],
+    black: [0.1, 0.1, 0.1],
+    blue: [0.15, 0.35, 0.8],
+  };
+  const wmState = { bytes: null, name: "", numPages: 0, page1: null }; // page1: {canvas, w, h}
+  const wmDropzone = $("wmDropzone"), wmFileInput = $("wmFileInput"),
+    wmPickBtn = $("wmPickBtn"), wmWork = $("wmWork"),
+    wmFileName = $("wmFileName"), wmPageCount = $("wmPageCount"),
+    wmText = $("wmText"), wmMode = $("wmMode"), wmSize = $("wmSize"),
+    wmAngle = $("wmAngle"), wmOpacity = $("wmOpacity"), wmOpacityVal = $("wmOpacityVal"),
+    wmColor = $("wmColor"), wmPreviewCanvas = $("wmPreviewCanvas"),
+    wmApplyBtn = $("wmApplyBtn"), wmResultInfo = $("wmResultInfo");
+
+  wmPickBtn.addEventListener("click", (e) => { e.stopPropagation(); wmFileInput.click(); });
+  wmDropzone.addEventListener("click", () => wmFileInput.click());
+  wmFileInput.addEventListener("change", () => { loadWmFile(wmFileInput.files[0]); wmFileInput.value = ""; });
+  ["dragenter", "dragover"].forEach((ev) =>
+    wmDropzone.addEventListener(ev, (e) => { e.preventDefault(); wmDropzone.classList.add("dragover"); }));
+  ["dragleave", "drop"].forEach((ev) =>
+    wmDropzone.addEventListener(ev, (e) => { e.preventDefault(); wmDropzone.classList.remove("dragover"); }));
+  wmDropzone.addEventListener("drop", (e) => loadWmFile(e.dataTransfer.files[0]));
+
+  async function loadWmFile(file) {
+    if (!file) return;
+    if (!(/pdf$/i.test(file.type) || /\.pdf$/i.test(file.name))) { toast("Pilih file PDF"); return; }
+    try {
+      const bytes = new Uint8Array(await file.arrayBuffer());
+      const doc = await pdfjsLib.getDocument({ data: bytes.slice() }).promise;
+      const n = doc.numPages;
+      const page = await doc.getPage(1);
+      const vp0 = page.getViewport({ scale: 1 });
+      const vp = page.getViewport({ scale: 480 / vp0.width });
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.ceil(vp.width); canvas.height = Math.ceil(vp.height);
+      const ctx = canvas.getContext("2d");
+      ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, canvas.width, canvas.height);
+      await page.render({ canvasContext: ctx, viewport: vp }).promise;
+      page.cleanup();
+      doc.destroy();
+      Object.assign(wmState, { bytes: bytes, name: file.name, numPages: n, page1: { canvas: canvas, w: vp0.width, h: vp0.height } });
+      wmFileName.textContent = file.name;
+      wmPageCount.textContent = n + " halaman";
+      wmWork.hidden = false;
+      wmResultInfo.hidden = true;
+      drawWmPreview();
+      toast("PDF dimuat: " + n + " halaman");
+    } catch (err) { console.error(err); toast("Gagal baca PDF"); }
+  }
+
+  function wmOpts() {
+    return {
+      text: wmText.value,
+      mode: wmMode.value,
+      size: Math.max(12, Math.min(200, +wmSize.value || 48)),
+      angle: Math.max(-90, Math.min(90, +wmAngle.value || 0)),
+      opacity: (+wmOpacity.value || 30) / 100,
+      color: WM_COLORS[wmColor.value] || WM_COLORS.gray,
+    };
+  }
+
+  // Pratinjau: gambar halaman 1 + teks watermark (skala preview : ukuran PDF asli).
+  function drawWmPreview() {
+    if (!wmState.page1) return;
+    const o = wmOpts();
+    const src = wmState.page1.canvas;
+    const c = wmPreviewCanvas;
+    c.width = src.width; c.height = src.height;
+    const ctx = c.getContext("2d");
+    ctx.drawImage(src, 0, 0);
+    const scale = c.width / wmState.page1.w; // px preview per poin PDF
+    const col = o.color;
+    ctx.fillStyle = "rgba(" + Math.round(col[0] * 255) + "," + Math.round(col[1] * 255) + "," + Math.round(col[2] * 255) + "," + o.opacity + ")";
+    ctx.font = "700 " + Math.round(o.size * scale) + "px 'Plus Jakarta Sans', sans-serif";
+    ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    const text = (o.text || "").trim() || "RAHASIA";
+    const pts = U.watermarkPositions(wmState.page1.w, wmState.page1.h, text, o.size, o.angle, o.mode);
+    for (const pt of pts) {
+      ctx.save();
+      ctx.translate(pt.x * scale, pt.y * scale);
+      ctx.rotate((-o.angle * Math.PI) / 180); // kanvas y-bawah: balik tanda agar sama dengan PDF
+      ctx.fillText(text, 0, 0);
+      ctx.restore();
+    }
+    wmOpacityVal.textContent = Math.round(o.opacity * 100) + "%";
+  }
+
+  [wmText, wmMode, wmSize, wmAngle, wmOpacity, wmColor].forEach((el) => {
+    el.addEventListener("input", drawWmPreview);
+    el.addEventListener("change", drawWmPreview);
+  });
+
+  wmApplyBtn.addEventListener("click", async () => {
+    if (!wmState.bytes) { toast("Pilih dulu file PDF-nya"); return; }
+    wmApplyBtn.disabled = true;
+    const oldLabel = wmApplyBtn.innerHTML;
+    wmApplyBtn.innerHTML = '<span class="msr">hourglass_top</span> Menambah watermark…';
+    wmResultInfo.hidden = true;
+    try {
+      const bytes = await U.applyWatermark(PDFLib, wmState.bytes, wmOpts());
+      const outName = U.resolveFileName(wmState.name.replace(/\.pdf$/i, "") + "-watermark");
+      wmResultInfo.textContent = "Ukuran hasil: " + U.fmtSize(bytes.length) + " · " + wmState.numPages + " halaman";
+      wmResultInfo.hidden = false;
+      addHistory({ name: outName, date: new Date().toISOString(), sizeBytes: bytes.length, pageCount: wmState.numPages, quality: "watermark" });
+      const blob = new Blob([bytes], { type: "application/pdf" });
+      const frame = document.createElement("iframe"); frame.title = "Pratinjau " + outName;
+      openPreview({
+        title: "Pratinjau hasil watermark",
+        sub: outName + " · " + wmState.numPages + " halaman",
+        bodyNode: frame, blob: blob, fileName: outName,
+        downloadLabel: '<span class="msr">download</span> Download',
+      });
+      toast("Watermark ditambahkan!");
+    } catch (err) { console.error(err); toast("Gagal menambah watermark"); }
+    finally { wmApplyBtn.disabled = false; wmApplyBtn.innerHTML = oldLabel; }
+  });
+
+  /* ---------- fitur: tanda tangan ---------- */
+
+  const signState = { bytes: null, name: "", numPages: 0, page: 1 };
+  const signPad = $("signPad"), signClearBtn = $("signClearBtn"),
+    signUploadBtn = $("signUploadBtn"), signUploadInput = $("signUploadInput"),
+    signDropzone = $("signDropzone"), signFileInput = $("signFileInput"),
+    signPickBtn = $("signPickBtn"), signWork = $("signWork"),
+    signFileName = $("signFileName"), signPageCount = $("signPageCount"),
+    signPage = $("signPage"), signPageTotal = $("signPageTotal"),
+    signPrevPage = $("signPrevPage"), signNextPage = $("signNextPage"),
+    signPos = $("signPos"), signWidth = $("signWidth"), signWidthVal = $("signWidthVal"),
+    signPreviewCanvas = $("signPreviewCanvas"),
+    signApplyBtn = $("signApplyBtn"), signResultInfo = $("signResultInfo");
+
+  // --- kanvas gambar tanda tangan ---
+  const signCtx = signPad.getContext("2d");
+  signCtx.lineWidth = 2.5; signCtx.lineCap = "round"; signCtx.lineJoin = "round"; signCtx.strokeStyle = "#111827";
+  let signDrawing = false, signLast = null;
+  function signPadPos(e) {
+    const r = signPad.getBoundingClientRect();
+    return { x: (e.clientX - r.left) * (signPad.width / r.width), y: (e.clientY - r.top) * (signPad.height / r.height) };
+  }
+  signPad.addEventListener("pointerdown", (e) => {
+    e.preventDefault();
+    signPad.setPointerCapture(e.pointerId);
+    signDrawing = true; signLast = signPadPos(e);
+  });
+  signPad.addEventListener("pointermove", (e) => {
+    if (!signDrawing || !signLast) return;
+    const p = signPadPos(e);
+    signCtx.beginPath(); signCtx.moveTo(signLast.x, signLast.y); signCtx.lineTo(p.x, p.y); signCtx.stroke();
+    signLast = p;
+  });
+  function signEndDraw() {
+    if (signDrawing) { signDrawing = false; signLast = null; drawSignPreview(); }
+  }
+  signPad.addEventListener("pointerup", signEndDraw);
+  signPad.addEventListener("pointercancel", signEndDraw);
+
+  signClearBtn.addEventListener("click", () => {
+    signCtx.clearRect(0, 0, signPad.width, signPad.height);
+    drawSignPreview();
+  });
+
+  signUploadBtn.addEventListener("click", () => signUploadInput.click());
+  signUploadInput.addEventListener("change", async () => {
+    const f = signUploadInput.files[0];
+    signUploadInput.value = "";
+    if (!f) return;
+    try {
+      const url = URL.createObjectURL(f);
+      const img = await loadImageFromUrl(url);
+      URL.revokeObjectURL(url);
+      signCtx.clearRect(0, 0, signPad.width, signPad.height);
+      const s = Math.min(signPad.width / img.naturalWidth, signPad.height / img.naturalHeight, 1);
+      const w = Math.round(img.naturalWidth * s), h = Math.round(img.naturalHeight * s);
+      signCtx.drawImage(img, (signPad.width - w) / 2, (signPad.height - h) / 2, w, h);
+      drawSignPreview();
+      toast("Gambar tanda tangan dimuat");
+    } catch (err) { toast("Gagal baca gambar"); }
+  });
+
+  // Potong kanvas ke area bertinta (biar posisi di PDF pas, tanpa margin kosong).
+  function signTrimmedCanvas() {
+    const w = signPad.width, h = signPad.height;
+    const data = signCtx.getImageData(0, 0, w, h).data;
+    let x0 = w, y0 = h, x1 = -1, y1 = -1;
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        if (data[(y * w + x) * 4 + 3] > 10) {
+          if (x < x0) x0 = x; if (x > x1) x1 = x;
+          if (y < y0) y0 = y; if (y > y1) y1 = y;
+        }
+      }
+    }
+    if (x1 < 0) return null; // kanvas kosong
+    const pad = 6;
+    x0 = Math.max(0, x0 - pad); y0 = Math.max(0, y0 - pad);
+    x1 = Math.min(w - 1, x1 + pad); y1 = Math.min(h - 1, y1 + pad);
+    const cw = x1 - x0 + 1, ch = y1 - y0 + 1;
+    const c = document.createElement("canvas");
+    c.width = cw; c.height = ch;
+    c.getContext("2d").drawImage(signPad, x0, y0, cw, ch, 0, 0, cw, ch);
+    return { canvas: c, w: cw, h: ch };
+  }
+
+  function signPngBytes() {
+    const t = signTrimmedCanvas();
+    if (!t) return null;
+    const bin = atob(t.canvas.toDataURL("image/png").split(",")[1]);
+    const out = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+    return out;
+  }
+
+  // Pratinjau: halaman yang dipilih + tanda tangan di posisi yang diatur.
+  async function drawSignPreview() {
+    signWidthVal.textContent = signWidth.value + " pt";
+    if (!signState.bytes) return;
+    const doc = await pdfjsLib.getDocument({ data: signState.bytes.slice() }).promise;
+    try {
+      const n = Math.max(1, Math.min(signState.numPages, +signPage.value || 1));
+      const page = await doc.getPage(n);
+      const vp0 = page.getViewport({ scale: 1 });
+      const vp = page.getViewport({ scale: 480 / vp0.width });
+      const c = signPreviewCanvas;
+      c.width = Math.ceil(vp.width); c.height = Math.ceil(vp.height);
+      const ctx = c.getContext("2d");
+      ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, c.width, c.height);
+      await page.render({ canvasContext: ctx, viewport: vp }).promise;
+      page.cleanup();
+      const t = signTrimmedCanvas();
+      if (t) {
+        const r = U.signatureRect(vp0.width, vp0.height, t.w, t.h, signPos.value, +signWidth.value || 150, 36);
+        const scale = c.width / vp0.width;
+        // koordinat PDF (y dari bawah) -> kanvas (y dari atas)
+        ctx.drawImage(t.canvas, r.x * scale, c.height - (r.y + r.h) * scale, r.w * scale, r.h * scale);
+      }
+    } finally { doc.destroy(); }
+  }
+
+  signPickBtn.addEventListener("click", (e) => { e.stopPropagation(); signFileInput.click(); });
+  signDropzone.addEventListener("click", () => signFileInput.click());
+  signFileInput.addEventListener("change", () => { loadSignFile(signFileInput.files[0]); signFileInput.value = ""; });
+  ["dragenter", "dragover"].forEach((ev) =>
+    signDropzone.addEventListener(ev, (e) => { e.preventDefault(); signDropzone.classList.add("dragover"); }));
+  ["dragleave", "drop"].forEach((ev) =>
+    signDropzone.addEventListener(ev, (e) => { e.preventDefault(); signDropzone.classList.remove("dragover"); }));
+  signDropzone.addEventListener("drop", (e) => loadSignFile(e.dataTransfer.files[0]));
+
+  async function loadSignFile(file) {
+    if (!file) return;
+    if (!(/pdf$/i.test(file.type) || /\.pdf$/i.test(file.name))) { toast("Pilih file PDF"); return; }
+    try {
+      const bytes = new Uint8Array(await file.arrayBuffer());
+      const doc = await pdfjsLib.getDocument({ data: bytes.slice() }).promise;
+      const n = doc.numPages;
+      doc.destroy();
+      Object.assign(signState, { bytes: bytes, name: file.name, numPages: n, page: 1 });
+      signFileName.textContent = file.name;
+      signPageCount.textContent = n + " halaman";
+      signPageTotal.textContent = n;
+      signPage.max = n; signPage.value = 1;
+      signWork.hidden = false;
+      signResultInfo.hidden = true;
+      drawSignPreview();
+      toast("PDF dimuat: " + n + " halaman");
+    } catch (err) { console.error(err); toast("Gagal baca PDF"); }
+  }
+
+  signPage.addEventListener("change", () => {
+    signPage.value = Math.max(1, Math.min(signState.numPages, +signPage.value || 1));
+    drawSignPreview();
+  });
+  signPrevPage.addEventListener("click", () => { signPage.value = Math.max(1, (+signPage.value || 1) - 1); drawSignPreview(); });
+  signNextPage.addEventListener("click", () => { signPage.value = Math.min(signState.numPages, (+signPage.value || 1) + 1); drawSignPreview(); });
+  signPos.addEventListener("change", drawSignPreview);
+  signWidth.addEventListener("input", drawSignPreview);
+
+  signApplyBtn.addEventListener("click", async () => {
+    if (!signState.bytes) { toast("Pilih dulu file PDF-nya"); return; }
+    const png = signPngBytes();
+    if (!png) { toast("Gambar dulu tanda tanganmu di kanvas atas"); return; }
+    signApplyBtn.disabled = true;
+    const oldLabel = signApplyBtn.innerHTML;
+    signApplyBtn.innerHTML = '<span class="msr">hourglass_top</span> Menempel…';
+    signResultInfo.hidden = true;
+    try {
+      const bytes = await U.applySignature(PDFLib, signState.bytes, png, {
+        page: +signPage.value || 1, pos: signPos.value, width: +signWidth.value || 150,
+      });
+      const outName = U.resolveFileName(signState.name.replace(/\.pdf$/i, "") + "-ditandatangani");
+      signResultInfo.textContent = "Ukuran hasil: " + U.fmtSize(bytes.length) + " · halaman " + (+signPage.value || 1);
+      signResultInfo.hidden = false;
+      addHistory({ name: outName, date: new Date().toISOString(), sizeBytes: bytes.length, pageCount: signState.numPages, quality: "tanda-tangan" });
+      const blob = new Blob([bytes], { type: "application/pdf" });
+      const frame = document.createElement("iframe"); frame.title = "Pratinjau " + outName;
+      openPreview({
+        title: "Pratinjau hasil tanda tangan",
+        sub: outName + " · halaman " + (+signPage.value || 1),
+        bodyNode: frame, blob: blob, fileName: outName,
+        downloadLabel: '<span class="msr">download</span> Download',
+      });
+      toast("Tanda tangan ditempel!");
+    } catch (err) { console.error(err); toast("Gagal menempel tanda tangan"); }
+    finally { signApplyBtn.disabled = false; signApplyBtn.innerHTML = oldLabel; }
+  });
+
+  /* ---------- fitur: PDF ke gambar ---------- */
+
+  const imgState = { bytes: null, name: "", numPages: 0 };
+  const imgDropzone = $("imgDropzone"), imgFileInput = $("imgFileInput"),
+    imgPickBtn = $("imgPickBtn"), imgWork = $("imgWork"),
+    imgFileName = $("imgFileName"), imgPageCount = $("imgPageCount"),
+    imgDpi = $("imgDpi"), imgRange = $("imgRange"),
+    imgApplyBtn = $("imgApplyBtn"), imgProgress = $("imgProgress"),
+    imgResults = $("imgResults");
+
+  imgPickBtn.addEventListener("click", (e) => { e.stopPropagation(); imgFileInput.click(); });
+  imgDropzone.addEventListener("click", () => imgFileInput.click());
+  imgFileInput.addEventListener("change", () => { loadImgFile(imgFileInput.files[0]); imgFileInput.value = ""; });
+  ["dragenter", "dragover"].forEach((ev) =>
+    imgDropzone.addEventListener(ev, (e) => { e.preventDefault(); imgDropzone.classList.add("dragover"); }));
+  ["dragleave", "drop"].forEach((ev) =>
+    imgDropzone.addEventListener(ev, (e) => { e.preventDefault(); imgDropzone.classList.remove("dragover"); }));
+  imgDropzone.addEventListener("drop", (e) => loadImgFile(e.dataTransfer.files[0]));
+
+  async function loadImgFile(file) {
+    if (!file) return;
+    if (!(/pdf$/i.test(file.type) || /\.pdf$/i.test(file.name))) { toast("Pilih file PDF"); return; }
+    try {
+      const bytes = new Uint8Array(await file.arrayBuffer());
+      const doc = await pdfjsLib.getDocument({ data: bytes.slice() }).promise;
+      const n = doc.numPages;
+      doc.destroy();
+      Object.assign(imgState, { bytes: bytes, name: file.name, numPages: n });
+      imgFileName.textContent = file.name;
+      imgPageCount.textContent = n + " halaman";
+      imgWork.hidden = false;
+      imgProgress.hidden = true;
+      imgResults.innerHTML = "";
+      toast("PDF dimuat: " + n + " halaman");
+    } catch (err) { console.error(err); toast("Gagal baca PDF"); }
+  }
+
+  function imgFormat() {
+    const el = document.querySelector('input[name="imgFormat"]:checked');
+    return el ? el.value : "jpg";
+  }
+
+  imgApplyBtn.addEventListener("click", async () => {
+    if (!imgState.bytes) { toast("Pilih dulu file PDF-nya"); return; }
+    if (!window.JSZip) { toast("Gagal memuat JSZip (butuh internet untuk CDN)."); return; }
+    let pages;
+    try {
+      const raw = imgRange.value.trim();
+      if (!raw) pages = Array.from({ length: imgState.numPages }, (_, i) => i + 1);
+      else {
+        pages = [];
+        for (const [s, e] of U.parseRanges(raw, imgState.numPages)) {
+          for (let n = s; n <= e; n++) pages.push(n);
+        }
+        pages = Array.from(new Set(pages)).sort((a, b) => a - b);
+      }
+    } catch (err) { toast(err.message); return; }
+    if (!pages.length) { toast("Tidak ada halaman dipilih"); return; }
+    const fmt = imgFormat();
+    const dpi = +imgDpi.value || 200;
+    const scale = dpi / 72;
+    imgApplyBtn.disabled = true;
+    const oldLabel = imgApplyBtn.innerHTML;
+    imgResults.innerHTML = "";
+    imgProgress.hidden = false;
+    try {
+      const doc = await pdfjsLib.getDocument({ data: imgState.bytes.slice() }).promise;
+      const base = imgState.name.replace(/\.pdf$/i, "") || "dokumen";
+      const files = [];
+      try {
+        for (let i = 0; i < pages.length; i++) {
+          const n = pages[i];
+          imgProgress.textContent = "Merender halaman " + (i + 1) + "/" + pages.length + "…";
+          const page = await doc.getPage(n);
+          const vp = page.getViewport({ scale: scale });
+          const canvas = document.createElement("canvas");
+          canvas.width = Math.ceil(vp.width); canvas.height = Math.ceil(vp.height);
+          const ctx = canvas.getContext("2d");
+          ctx.fillStyle = "#ffffff"; ctx.fillRect(0, 0, canvas.width, canvas.height);
+          await page.render({ canvasContext: ctx, viewport: vp }).promise;
+          page.cleanup();
+          const name = U.imageFileName(base, n, imgState.numPages, fmt);
+          const blob = await new Promise((res) => canvas.toBlob(res, fmt === "png" ? "image/png" : "image/jpeg", 0.92));
+          files.push({ name: name, blob: blob, size: blob.size, url: URL.createObjectURL(blob) });
+        }
+      } finally { doc.destroy(); }
+      imgProgress.textContent = "Selesai: " + files.length + " gambar dibuat.";
+      addHistory({ name: files.length > 1 ? base + "-gambar.zip" : files[0].name, date: new Date().toISOString(), sizeBytes: files.reduce((s, f) => s + f.size, 0), pageCount: files.length, quality: "pdf-ke-gambar" });
+      for (const f of files) {
+        const card = document.createElement("div"); card.className = "cresult";
+        const top = document.createElement("div"); top.className = "cresult-top";
+        const nm = document.createElement("span"); nm.className = "nm"; nm.textContent = f.name; nm.title = f.name;
+        const sz = document.createElement("span"); sz.className = "cresult-badge"; sz.textContent = U.fmtSize(f.size);
+        top.appendChild(nm); top.appendChild(sz);
+        const thumb = document.createElement("img");
+        thumb.src = f.url; thumb.alt = f.name; thumb.className = "img-thumb";
+        const acts = document.createElement("div"); acts.className = "cresult-actions";
+        const bDown = document.createElement("button"); bDown.type = "button"; bDown.className = "btn btn-primary";
+        bDown.innerHTML = '<span class="msr">download</span> Download';
+        bDown.addEventListener("click", () => {
+          const a = document.createElement("a");
+          a.href = f.url; a.download = f.name;
+          document.body.appendChild(a); a.click(); a.remove();
+        });
+        acts.appendChild(bDown);
+        card.appendChild(top); card.appendChild(thumb); card.appendChild(acts);
+        imgResults.appendChild(card);
+      }
+      if (files.length > 1) {
+        const zip = new JSZip();
+        for (const f of files) zip.file(f.name, f.blob);
+        const zipBlob = await zip.generateAsync({ type: "blob" });
+        const zipName = U.resolveFileName(base + "-gambar").replace(/\.pdf$/i, "") + ".zip";
+        const ul = document.createElement("ul");
+        ul.className = "modal-list";
+        for (const f of files) {
+          const li = document.createElement("li");
+          const nm = document.createElement("span"); nm.textContent = f.name;
+          const sz = document.createElement("span"); sz.className = "m-size"; sz.textContent = U.fmtSize(f.size);
+          li.appendChild(nm); li.appendChild(sz);
+          ul.appendChild(li);
+        }
+        openPreview({
+          title: "Hasil PDF ke gambar",
+          sub: files.length + " gambar · total " + U.fmtSize(zipBlob.size),
+          bodyNode: ul, blob: zipBlob, fileName: zipName,
+          downloadLabel: '<span class="msr">download</span> Download ZIP',
+        });
+      }
+      toast("Berhasil! " + files.length + " gambar dibuat.");
+    } catch (err) { console.error(err); toast("Gagal mengubah ke gambar"); }
+    finally { imgApplyBtn.disabled = false; imgApplyBtn.innerHTML = oldLabel; }
+  });
 
   if (!window.pdfjsLib || !window.PDFLib || !window.PdfUtil) {
     toast("Gagal memuat library (butuh internet untuk CDN).");
