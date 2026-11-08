@@ -617,6 +617,7 @@ h2 .msr{font-size:1.35rem}
 .slider{flex:1;accent-color:var(--accent);min-width:120px}
 .preview-wrap{margin:4px 0 14px}
 .preview-wrap canvas{max-width:100%;height:auto;border:1px solid var(--line);border-radius:12px;background:#fff;display:block;margin:0 auto}
+#signPreviewCanvas{cursor:default;touch-action:none}
 .sign-pad-wrap{margin-bottom:18px}
 .sign-pad-wrap .rside-title{margin:0 0 10px}
 .sig-pad{width:100%;max-width:520px;height:200px;border:1.5px dashed #b6c2d8;border-radius:14px;background:#fff;cursor:crosshair;touch-action:none;display:block}
