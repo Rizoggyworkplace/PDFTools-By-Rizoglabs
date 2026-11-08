@@ -41,6 +41,10 @@
   <button id="tabSplit" class="tab" type="button"><span class="msr">content_cut</span> Pisah</button>
   <button id="tabCompress" class="tab" type="button"><span class="msr">compress</span> Kompres</button>
   <button id="tabRedact" class="tab" type="button"><span class="msr">ink_eraser</span> Samarkan</button>
+  <button id="tabOrganize" class="tab" type="button"><span class="msr">sort</span> Atur Halaman</button>
+  <button id="tabWatermark" class="tab" type="button"><span class="msr">branding_watermark</span> Watermark</button>
+  <button id="tabSign" class="tab" type="button"><span class="msr">draw</span> Tanda Tangan</button>
+  <button id="tabToImage" class="tab" type="button"><span class="msr">image</span> PDF ke Gambar</button>
 </nav>
 
 <main class="wrap">
@@ -299,6 +303,224 @@
       <li>Pilih 1 file PDF, lalu pilih halaman di kolom kiri.</li>
       <li>Seret di halaman untuk menandai area, atau pakai <strong>Penyamaran cerdas</strong> / <strong>pencarian teks</strong>.</li>
       <li>Tekan <strong>Samarkan</strong> untuk mengunduh hasilnya.</li>
+    </ol>
+  </section>
+
+</div>
+
+<!-- ============ MODE ATUR HALAMAN ============ -->
+<div id="paneOrganize" hidden>
+
+  <section id="orgDropzone" class="dropzone" aria-label="Area upload PDF untuk diatur halamannya">
+    <div class="dz-icon"><span class="msr">sort</span></div>
+    <p class="dz-title"><strong>Tarik &amp; letakkan 1 file PDF di sini</strong></p>
+    <p class="dz-sub">atau</p>
+    <button id="orgPickBtn" class="btn" type="button">Pilih PDF</button>
+    <p class="dz-hint">Hanya 1 file PDF</p>
+    <input id="orgFileInput" type="file" accept=".pdf,application/pdf" hidden>
+  </section>
+
+  <div id="orgWork" class="split-work" hidden>
+    <p class="split-fileinfo"><strong id="orgFileName"></strong> · <span id="orgPageCount"></span></p>
+    <div class="org-toolbar">
+      <span id="orgStat" class="stat"></span>
+      <button id="orgResetBtn" class="btn btn-ghost" type="button"><span class="msr">restart_alt</span> Reset</button>
+    </div>
+    <div id="orgGrid" class="grid" aria-label="Halaman"></div>
+    <button id="orgApplyBtn" class="btn btn-primary btn-big" type="button"><span class="msr">download</span> Unduh Hasil</button>
+    <p id="orgResultInfo" class="result-info" hidden></p>
+    <p class="privacy"><span class="msr">lock</span> Semua proses di perangkatmu. Tidak ada file yang dikirim ke server.</p>
+  </div>
+
+  <section class="howto">
+    <h2>Cara pakai — Atur Halaman</h2>
+    <ol>
+      <li>Pilih 1 file PDF.</li>
+      <li>Di tiap kartu halaman: <strong>geser</strong> urutannya (<span class="msr">arrow_back</span> <span class="msr">arrow_forward</span> atau seret kartu), <strong>putar</strong> 90° (<span class="msr">rotate_left</span> <span class="msr">rotate_right</span>), atau <strong>hapus</strong> (<span class="msr">delete</span> — bisa dibatalkan dengan <span class="msr">undo</span>).</li>
+      <li>Tekan <strong>Unduh Hasil</strong> untuk mengunduh PDF baru.</li>
+    </ol>
+  </section>
+
+</div>
+
+<!-- ============ MODE WATERMARK ============ -->
+<div id="paneWatermark" hidden>
+
+  <section id="wmDropzone" class="dropzone" aria-label="Area upload PDF untuk watermark">
+    <div class="dz-icon"><span class="msr">branding_watermark</span></div>
+    <p class="dz-title"><strong>Tarik &amp; letakkan 1 file PDF di sini</strong></p>
+    <p class="dz-sub">atau</p>
+    <button id="wmPickBtn" class="btn" type="button">Pilih PDF</button>
+    <p class="dz-hint">Hanya 1 file PDF</p>
+    <input id="wmFileInput" type="file" accept=".pdf,application/pdf" hidden>
+  </section>
+
+  <div id="wmWork" class="split-work" hidden>
+    <p class="split-fileinfo"><strong id="wmFileName"></strong> · <span id="wmPageCount"></span></p>
+    <div class="opt-row">
+      <label class="opt-label" for="wmText">Teks watermark</label>
+      <input id="wmText" class="text-input" type="text" value="RAHASIA" maxlength="60" spellcheck="false" autocomplete="off" aria-label="Teks watermark">
+    </div>
+    <div class="opt-row">
+      <label class="opt-label" for="wmMode">Penempatan</label>
+      <select id="wmMode" class="select-input" aria-label="Penempatan watermark">
+        <option value="center">Tengah halaman (diagonal)</option>
+        <option value="tile">Ubin berulang</option>
+      </select>
+    </div>
+    <div class="opt-row">
+      <label class="opt-label" for="wmSize">Ukuran huruf</label>
+      <input id="wmSize" class="text-input num-input" type="number" min="12" max="200" value="48" aria-label="Ukuran huruf">
+    </div>
+    <div class="opt-row">
+      <label class="opt-label" for="wmAngle">Sudut</label>
+      <input id="wmAngle" class="text-input num-input" type="number" min="-90" max="90" value="-45" aria-label="Sudut watermark">
+      <span class="muted">derajat</span>
+    </div>
+    <div class="opt-row">
+      <label class="opt-label" for="wmOpacity">Transparansi</label>
+      <input id="wmOpacity" type="range" min="10" max="100" value="30" class="slider" aria-label="Transparansi">
+      <span id="wmOpacityVal" class="stat">30%</span>
+    </div>
+    <div class="opt-row">
+      <label class="opt-label" for="wmColor">Warna</label>
+      <select id="wmColor" class="select-input" aria-label="Warna watermark">
+        <option value="gray">Abu-abu</option>
+        <option value="red">Merah</option>
+        <option value="black">Hitam</option>
+        <option value="blue">Biru</option>
+      </select>
+    </div>
+    <div class="preview-wrap">
+      <canvas id="wmPreviewCanvas"></canvas>
+      <p class="field-note">Pratinjau halaman pertama — berubah saat pengaturan diganti.</p>
+    </div>
+    <button id="wmApplyBtn" class="btn btn-primary btn-big" type="button"><span class="msr">branding_watermark</span> Tambah Watermark &amp; Unduh</button>
+    <p id="wmResultInfo" class="result-info" hidden></p>
+    <p class="privacy"><span class="msr">lock</span> Watermark ditambahkan di semua halaman. Semua proses di perangkatmu.</p>
+  </div>
+
+  <section class="howto">
+    <h2>Cara pakai — Watermark</h2>
+    <ol>
+      <li>Pilih 1 file PDF.</li>
+      <li>Atur <strong>teks</strong>, <strong>penempatan</strong>, <strong>ukuran</strong>, <strong>sudut</strong>, <strong>transparansi</strong>, dan <strong>warna</strong> — pratinjau halaman pertama langsung berubah.</li>
+      <li>Tekan <strong>Tambah Watermark &amp; Unduh</strong>.</li>
+    </ol>
+  </section>
+
+</div>
+
+<!-- ============ MODE TANDA TANGAN ============ -->
+<div id="paneSign" hidden>
+
+  <section class="sign-pad-wrap">
+    <h2 class="rside-title">Tanda tanganmu</h2>
+    <canvas id="signPad" class="sig-pad" width="520" height="200"></canvas>
+    <div class="sig-pad-actions">
+      <button id="signClearBtn" class="btn btn-ghost" type="button"><span class="msr">delete</span> Hapus</button>
+      <button id="signUploadBtn" class="btn" type="button"><span class="msr">upload</span> Upload gambar</button>
+      <input id="signUploadInput" type="file" accept="image/png,image/jpeg" hidden>
+    </div>
+    <p class="field-note">Gambar tanda tangan di kanvas, atau upload PNG (latar transparan lebih bagus).</p>
+  </section>
+
+  <section id="signDropzone" class="dropzone" aria-label="Area upload PDF untuk ditandatangani">
+    <div class="dz-icon"><span class="msr">draw</span></div>
+    <p class="dz-title"><strong>Tarik &amp; letakkan 1 file PDF di sini</strong></p>
+    <p class="dz-sub">atau</p>
+    <button id="signPickBtn" class="btn" type="button">Pilih PDF</button>
+    <p class="dz-hint">Hanya 1 file PDF</p>
+    <input id="signFileInput" type="file" accept=".pdf,application/pdf" hidden>
+  </section>
+
+  <div id="signWork" class="split-work" hidden>
+    <p class="split-fileinfo"><strong id="signFileName"></strong> · <span id="signPageCount"></span></p>
+    <div class="opt-row">
+      <label class="opt-label" for="signPage">Halaman</label>
+      <input id="signPage" class="text-input num-input" type="number" min="1" value="1" aria-label="Halaman tanda tangan">
+      <span class="muted">dari <span id="signPageTotal">1</span></span>
+      <button id="signPrevPage" class="icon-btn" type="button" aria-label="Halaman sebelumnya"><span class="msr">chevron_left</span></button>
+      <button id="signNextPage" class="icon-btn" type="button" aria-label="Halaman berikutnya"><span class="msr">chevron_right</span></button>
+    </div>
+    <div class="opt-row">
+      <label class="opt-label" for="signPos">Posisi</label>
+      <select id="signPos" class="select-input" aria-label="Posisi tanda tangan">
+        <option value="left">Kiri bawah</option>
+        <option value="center">Tengah bawah</option>
+        <option value="right" selected>Kanan bawah</option>
+      </select>
+    </div>
+    <div class="opt-row">
+      <label class="opt-label" for="signWidth">Lebar tanda tangan</label>
+      <input id="signWidth" type="range" min="60" max="300" value="150" class="slider" aria-label="Lebar tanda tangan">
+      <span id="signWidthVal" class="stat">150 pt</span>
+    </div>
+    <div class="preview-wrap">
+      <canvas id="signPreviewCanvas"></canvas>
+      <p class="field-note">Pratinjau posisi tanda tangan di halaman yang dipilih.</p>
+    </div>
+    <button id="signApplyBtn" class="btn btn-primary btn-big" type="button"><span class="msr">draw</span> Tempel &amp; Unduh</button>
+    <p id="signResultInfo" class="result-info" hidden></p>
+    <p class="privacy"><span class="msr">lock</span> Tanda tangan ditempel permanen di halaman yang dipilih. Semua proses di perangkatmu.</p>
+  </div>
+
+  <section class="howto">
+    <h2>Cara pakai — Tanda Tangan</h2>
+    <ol>
+      <li>Gambar tanda tangan di kanvas (atau upload gambar PNG/JPG).</li>
+      <li>Pilih 1 file PDF, lalu atur <strong>halaman</strong>, <strong>posisi</strong>, dan <strong>lebar</strong> — pratinjau langsung berubah.</li>
+      <li>Tekan <strong>Tempel &amp; Unduh</strong>.</li>
+    </ol>
+  </section>
+
+</div>
+
+<!-- ============ MODE PDF KE GAMBAR ============ -->
+<div id="paneToImage" hidden>
+
+  <section id="imgDropzone" class="dropzone" aria-label="Area upload PDF untuk diubah ke gambar">
+    <div class="dz-icon"><span class="msr">image</span></div>
+    <p class="dz-title"><strong>Tarik &amp; letakkan 1 file PDF di sini</strong></p>
+    <p class="dz-sub">atau</p>
+    <button id="imgPickBtn" class="btn" type="button">Pilih PDF</button>
+    <p class="dz-hint">Hanya 1 file PDF</p>
+    <input id="imgFileInput" type="file" accept=".pdf,application/pdf" hidden>
+  </section>
+
+  <div id="imgWork" class="split-work" hidden>
+    <p class="split-fileinfo"><strong id="imgFileName"></strong> · <span id="imgPageCount"></span></p>
+    <div class="opt-row">
+      <span class="opt-label">Format</span>
+      <div class="seg" role="radiogroup" aria-label="Format gambar">
+        <label class="seg-opt"><input type="radio" name="imgFormat" value="jpg" checked><span>JPG</span></label>
+        <label class="seg-opt"><input type="radio" name="imgFormat" value="png"><span>PNG</span></label>
+      </div>
+    </div>
+    <div class="opt-row">
+      <label class="opt-label" for="imgDpi">Kualitas</label>
+      <select id="imgDpi" class="select-input" aria-label="Kualitas gambar">
+        <option value="150">150 DPI (standar)</option>
+        <option value="200" selected>200 DPI (bagus)</option>
+        <option value="300">300 DPI (cetak)</option>
+      </select>
+    </div>
+    <div class="opt-row">
+      <label class="opt-label" for="imgRange">Halaman</label>
+      <input id="imgRange" class="text-input range-input" type="text" placeholder="kosong = semua halaman" spellcheck="false" autocomplete="off" aria-label="Halaman yang diubah">
+    </div>
+    <button id="imgApplyBtn" class="btn btn-primary btn-big" type="button"><span class="msr">image</span> Ubah ke Gambar</button>
+    <p id="imgProgress" class="result-info" hidden></p>
+    <div id="imgResults" class="cresults"></div>
+    <p class="privacy"><span class="msr">lock</span> Tiap halaman jadi 1 file gambar. Banyak halaman diunduh sebagai 1 file ZIP. Semua proses di perangkatmu.</p>
+  </div>
+
+  <section class="howto">
+    <h2>Cara pakai — PDF ke Gambar</h2>
+    <ol>
+      <li>Pilih 1 file PDF.</li>
+      <li>Pilih <strong>format</strong> (JPG/PNG), <strong>kualitas</strong>, dan <strong>halaman</strong> (kosong = semua).</li>
+      <li>Tekan <strong>Ubah ke Gambar</strong> — 1 halaman langsung diunduh, banyak halaman jadi 1 ZIP.</li>
     </ol>
   </section>
 
