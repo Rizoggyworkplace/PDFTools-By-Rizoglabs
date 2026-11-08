@@ -544,6 +544,142 @@
     return arr.slice(0, m);
   }
 
+
+      /* ---------- atur halaman ---------- */
+
+  // Normalisasi derajat rotasi ke 0..359.
+  function normalizeRotation(deg) {
+    const d = Math.round(Number(deg) || 0) % 360;
+    return (d + 360) % 360;
+  }
+
+  // state: [{src: 0-based, rot, deleted}] -> plan [{src: 1-based, rotation}].
+  function planFromPages(state) {
+    const plan = [];
+    for (const p of state || []) {
+      if (p.deleted) continue;
+      plan.push({ src: (Number(p.src) || 0) + 1, rotation: normalizeRotation(p.rot) });
+    }
+    return plan;
+  }
+
+  // plan: [{src: 1-based, rotation}] -> PDF baru (halaman disalin sesuai urutan + rotasi).
+  async function applyPagePlan(PDFLib, srcBytes, plan) {
+    const src = await PDFLib.PDFDocument.load(srcBytes);
+    const out = await PDFLib.PDFDocument.create();
+    for (const item of plan || []) {
+      const i = (Number(item.src) || 0) - 1;
+      if (i < 0 || i >= src.getPageCount()) continue;
+      const cp = (await out.copyPages(src, [i]))[0];
+      const rot = normalizeRotation(item.rotation);
+      if (rot) {
+        const cur = src.getPage(i).getRotation().angle;
+        cp.setRotation(PDFLib.degrees((cur + rot) % 360));
+      }
+      out.addPage(cp);
+    }
+    return out.save({ useObjectStreams: true });
+  }
+
+  /* ---------- watermark ---------- */
+
+  // Titik awal baseline agar teks (lebar tw, tinggi th, sudut deg) berpusat di (cx, cy).
+  function centeredTextPoint(cx, cy, tw, th, angleDeg) {
+    const a = (angleDeg * Math.PI) / 180;
+    const ux = Math.cos(a), uy = Math.sin(a);
+    const vx = -Math.sin(a), vy = Math.cos(a);
+    return {
+      x: cx - (tw / 2) * ux - (th / 2) * vx,
+      y: cy - (tw / 2) * uy - (th / 2) * vy,
+    };
+  }
+
+  // Posisi watermark dalam koordinat PDF (origin kiri-bawah).
+  // mode "center": satu titik tengah. mode "tile": grid berulang.
+  function watermarkPositions(pageW, pageH, text, fontSize, angleDeg, mode) {
+    const a = (angleDeg * Math.PI) / 180;
+    const cos = Math.abs(Math.cos(a)), sin = Math.abs(Math.sin(a));
+    const tw = Math.max(10, String(text || "").length * fontSize * 0.55);
+    const th = fontSize;
+    const bw = tw * cos + th * sin;
+    const bh = tw * sin + th * cos;
+    if (mode === "tile") {
+      const stepX = bw + 90, stepY = bh + 90;
+      const out = [];
+      for (let y = stepY / 2; y < pageH + bh; y += stepY) {
+        for (let x = stepX / 2; x < pageW + bw; x += stepX) {
+          out.push({ x: x, y: y });
+        }
+      }
+      return out;
+    }
+    return [{ x: pageW / 2, y: pageH / 2 }];
+  }
+
+  // opts: {text, size, opacity, angle, color:[r,g,b], mode:'center'|'tile'}
+  async function applyWatermark(PDFLib, srcBytes, opts) {
+    const o = opts || {};
+    const doc = await PDFLib.PDFDocument.load(srcBytes);
+    const font = await doc.embedFont(PDFLib.StandardFonts.HelveticaBold);
+    const text = String(o.text == null ? "" : o.text).trim() || "RAHASIA";
+    const size = Math.max(8, Math.min(200, Number(o.size) || 48));
+    const opacity = Math.max(0.05, Math.min(1, Number(o.opacity) || 0.3));
+    const angle = Number(o.angle) || 0;
+    const mode = o.mode === "tile" ? "tile" : "center";
+    const col = Array.isArray(o.color) && o.color.length === 3 ? o.color : [0.5, 0.5, 0.5];
+    const tw = font.widthOfTextAtSize(text, size);
+    for (const pg of doc.getPages()) {
+      const sz = pg.getSize();
+      const pts = watermarkPositions(sz.width, sz.height, text, size, angle, mode);
+      for (const pt of pts) {
+        const p = centeredTextPoint(pt.x, pt.y, tw, size, angle);
+        pg.drawText(text, {
+          x: p.x, y: p.y, size: size, font: font,
+          color: PDFLib.rgb(col[0], col[1], col[2]),
+          opacity: opacity, rotate: PDFLib.degrees(angle),
+        });
+      }
+    }
+    return doc.save({ useObjectStreams: true });
+  }
+
+  /* ---------- tanda tangan ---------- */
+
+  // Rect tanda tangan (koordinat PDF, origin kiri-bawah) dari ukuran gambar & posisi.
+  function signatureRect(pageW, pageH, imgW, imgH, pos, width, margin) {
+    const m = margin == null ? 36 : Number(margin) || 0;
+    const w = Math.max(20, Math.min(pageW - m * 2, Number(width) || 150));
+    const h = Math.max(10, (w * imgH) / Math.max(1, imgW));
+    let x = m;
+    if (pos === "center") x = (pageW - w) / 2;
+    else if (pos === "right") x = pageW - w - m;
+    return { x: x, y: m, w: w, h: h };
+  }
+
+  // opts: {page: 1-based, pos, width, margin}
+  async function applySignature(PDFLib, srcBytes, pngBytes, opts) {
+    const o = opts || {};
+    const doc = await PDFLib.PDFDocument.load(srcBytes);
+    const img = await doc.embedPng(pngBytes);
+    const n = Math.max(1, Math.min(doc.getPageCount(), Number(o.page) || 1));
+    const pg = doc.getPage(n - 1);
+    const sz = pg.getSize();
+    const r = signatureRect(sz.width, sz.height, img.width, img.height, o.pos || "right", o.width || 150, o.margin == null ? 36 : o.margin);
+    pg.drawImage(img, { x: r.x, y: r.y, width: r.w, height: r.h });
+    return doc.save({ useObjectStreams: true });
+  }
+
+  /* ---------- PDF ke gambar ---------- */
+
+  // Nama file gambar hasil: "dokumen" + halaman 1 dari 12 -> "dokumen-01.jpg"
+  function imageFileName(base, n, total, ext) {
+    let b = String(base == null ? "" : base).trim().replace(/\.pdf$/i, "") || "dokumen";
+    const digits = String(Math.max(1, Number(total) || 1)).length;
+    const num = String(Math.max(1, Number(n) || 1)).padStart(digits, "0");
+    return b + "-" + num + "." + (ext || "jpg");
+  }
+
+
   return {
     resolveFileName: resolveFileName,
     fmtSize: fmtSize,
@@ -569,5 +705,14 @@
     unionRects: unionRects,
     normRect: normRect,
     mulTransform: mulTransform,
+    normalizeRotation: normalizeRotation,
+    planFromPages: planFromPages,
+    applyPagePlan: applyPagePlan,
+    centeredTextPoint: centeredTextPoint,
+    watermarkPositions: watermarkPositions,
+    applyWatermark: applyWatermark,
+    signatureRect: signatureRect,
+    applySignature: applySignature,
+    imageFileName: imageFileName,
   };
 });
