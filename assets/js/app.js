@@ -1815,8 +1815,10 @@
   });
 
   /* ---------- fitur: tanda tangan ---------- */
+  // Tanda tangan bisa digeser & diubah ukurannya langsung di pratinjau
+  // (drag badan = pindah, drag sudut kanan-bawah = resize).
 
-  const signState = { bytes: null, name: "", numPages: 0, page: 1 };
+  const signState = { bytes: null, name: "", numPages: 0, page: 1, rect: null, pageImg: null, sigImg: null };
   const signPad = $("signPad"), signClearBtn = $("signClearBtn"),
     signUploadBtn = $("signUploadBtn"), signUploadInput = $("signUploadInput"),
     signDropzone = $("signDropzone"), signFileInput = $("signFileInput"),
@@ -1848,13 +1850,14 @@
     signLast = p;
   });
   function signEndDraw() {
-    if (signDrawing) { signDrawing = false; signLast = null; drawSignPreview(); }
+    if (signDrawing) { signDrawing = false; signLast = null; signState.sigImg = null; drawSignPreview(); }
   }
   signPad.addEventListener("pointerup", signEndDraw);
   signPad.addEventListener("pointercancel", signEndDraw);
 
   signClearBtn.addEventListener("click", () => {
     signCtx.clearRect(0, 0, signPad.width, signPad.height);
+    signState.sigImg = null;
     drawSignPreview();
   });
 
@@ -1871,6 +1874,7 @@
       const s = Math.min(signPad.width / img.naturalWidth, signPad.height / img.naturalHeight, 1);
       const w = Math.round(img.naturalWidth * s), h = Math.round(img.naturalHeight * s);
       signCtx.drawImage(img, (signPad.width - w) / 2, (signPad.height - h) / 2, w, h);
+      signState.sigImg = null;
       drawSignPreview();
       toast("Gambar tanda tangan dimuat");
     } catch (err) { toast("Gagal baca gambar"); }
@@ -1878,6 +1882,7 @@
 
   // Potong kanvas ke area bertinta (biar posisi di PDF pas, tanpa margin kosong).
   function signTrimmedCanvas() {
+    if (signState.sigImg) return signState.sigImg;
     const w = signPad.width, h = signPad.height;
     const data = signCtx.getImageData(0, 0, w, h).data;
     let x0 = w, y0 = h, x1 = -1, y1 = -1;
@@ -1897,7 +1902,8 @@
     const c = document.createElement("canvas");
     c.width = cw; c.height = ch;
     c.getContext("2d").drawImage(signPad, x0, y0, cw, ch, 0, 0, cw, ch);
-    return { canvas: c, w: cw, h: ch };
+    signState.sigImg = { canvas: c, w: cw, h: ch };
+    return signState.sigImg;
   }
 
   function signPngBytes() {
@@ -1909,31 +1915,131 @@
     return out;
   }
 
-  // Pratinjau: halaman yang dipilih + tanda tangan di posisi yang diatur.
-  async function drawSignPreview() {
-    signWidthVal.textContent = signWidth.value + " pt";
+  // Render halaman yang dipilih sekali, simpan sebagai gambar (biar drag pratinjau ringan).
+  async function renderSignPage() {
     if (!signState.bytes) return;
     const doc = await pdfjsLib.getDocument({ data: signState.bytes.slice() }).promise;
     try {
       const n = Math.max(1, Math.min(signState.numPages, +signPage.value || 1));
+      signState.page = n;
       const page = await doc.getPage(n);
       const vp0 = page.getViewport({ scale: 1 });
       const vp = page.getViewport({ scale: 480 / vp0.width });
-      const c = signPreviewCanvas;
+      const c = document.createElement("canvas");
       c.width = Math.ceil(vp.width); c.height = Math.ceil(vp.height);
       const ctx = c.getContext("2d");
       ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, c.width, c.height);
       await page.render({ canvasContext: ctx, viewport: vp }).promise;
       page.cleanup();
-      const t = signTrimmedCanvas();
-      if (t) {
-        const r = U.signatureRect(vp0.width, vp0.height, t.w, t.h, signPos.value, +signWidth.value || 150, 36);
-        const scale = c.width / vp0.width;
-        // koordinat PDF (y dari bawah) -> kanvas (y dari atas)
-        ctx.drawImage(t.canvas, r.x * scale, c.height - (r.y + r.h) * scale, r.w * scale, r.h * scale);
+      signState.pageImg = { canvas: c, w: vp0.width, h: vp0.height };
+      // rect lama dijepit ke ukuran halaman baru bila perlu
+      if (signState.rect) {
+        const r = signState.rect;
+        r.w = Math.min(r.w, signState.pageImg.w - 10);
+        r.h = Math.min(r.h, signState.pageImg.h - 10);
+        r.x = Math.max(0, Math.min(r.x, signState.pageImg.w - r.w));
+        r.y = Math.max(0, Math.min(r.y, signState.pageImg.h - r.h));
       }
+      drawSignPreview();
     } finally { doc.destroy(); }
   }
+
+  // Posisi awal tanda tangan (bila belum pernah diatur).
+  function ensureSignRect() {
+    if (signState.rect || !signState.pageImg) return;
+    const t = signTrimmedCanvas();
+    if (!t) return;
+    signState.rect = U.signatureRect(signState.pageImg.w, signState.pageImg.h, t.w, t.h, signPos.value, +signWidth.value || 150, 36);
+    signWidth.value = Math.round(signState.rect.w);
+  }
+
+  // Pratinjau: halaman + tanda tangan + bingkai & gagang resize (cepat, tanpa render ulang).
+  function drawSignPreview() {
+    signWidthVal.textContent = signWidth.value + " pt";
+    if (!signState.pageImg) return;
+    const pg = signState.pageImg;
+    const c = signPreviewCanvas;
+    c.width = pg.canvas.width; c.height = pg.canvas.height;
+    const ctx = c.getContext("2d");
+    ctx.drawImage(pg.canvas, 0, 0);
+    ensureSignRect();
+    const t = signTrimmedCanvas();
+    const r = signState.rect;
+    if (!t || !r) return;
+    const scale = c.width / pg.w; // px kanvas per poin PDF
+    const x = r.x * scale, y = c.height - (r.y + r.h) * scale, w = r.w * scale, h = r.h * scale;
+    ctx.drawImage(t.canvas, x, y, w, h);
+    ctx.setLineDash([6, 4]); ctx.lineWidth = 2; ctx.strokeStyle = "#e11d48";
+    ctx.strokeRect(x, y, w, h);
+    ctx.setLineDash([]);
+    // gagang resize di sudut kanan-bawah
+    const hs = 14;
+    ctx.fillStyle = "#e11d48";
+    ctx.fillRect(x + w - hs / 2, y + h - hs / 2, hs, hs);
+    ctx.fillStyle = "#fff";
+    ctx.fillRect(x + w - 3, y + h - 3, 6, 6);
+  }
+
+  // --- drag di pratinjau: pindah / resize ---
+  function signPoint(e) {
+    const pg = signState.pageImg;
+    const r = signPreviewCanvas.getBoundingClientRect();
+    const scale = signPreviewCanvas.width / pg.w;
+    const cx = (e.clientX - r.left) * (signPreviewCanvas.width / r.width);
+    const cy = (e.clientY - r.top) * (signPreviewCanvas.height / r.height);
+    return { x: cx / scale, y: (signPreviewCanvas.height - cy) / scale };
+  }
+  function signHit(p) {
+    const r = signState.rect;
+    if (!r) return null;
+    const pg = signState.pageImg;
+    const scale = signPreviewCanvas.width / pg.w;
+    const hx = (r.x + r.w) * scale, hy = signPreviewCanvas.height - r.y * scale;
+    const px = p.x * scale, py = signPreviewCanvas.height - p.y * scale;
+    if (Math.abs(px - hx) <= 12 && Math.abs(py - hy) <= 12) return "resize";
+    if (p.x >= r.x && p.x <= r.x + r.w && p.y >= r.y && p.y <= r.y + r.h) return "move";
+    return null;
+  }
+  let signDrag = null;
+  signPreviewCanvas.addEventListener("pointerdown", (e) => {
+    if (!signState.rect || !signState.pageImg) return;
+    const mode = signHit(signPoint(e));
+    if (!mode) return;
+    e.preventDefault();
+    signPreviewCanvas.setPointerCapture(e.pointerId);
+    const p = signPoint(e);
+    const r = signState.rect;
+    signDrag = mode === "move"
+      ? { mode: mode, dx: p.x - r.x, dy: p.y - r.y }
+      : { mode: mode };
+  });
+  signPreviewCanvas.addEventListener("pointermove", (e) => {
+    if (!signState.rect || !signState.pageImg) return;
+    const pg = signState.pageImg;
+    const t = signTrimmedCanvas();
+    if (!t) return;
+    const p = signPoint(e);
+    if (!signDrag) {
+      const mode = signHit(p);
+      signPreviewCanvas.style.cursor = mode === "resize" ? "nwse-resize" : mode === "move" ? "move" : "default";
+      return;
+    }
+    const r = signState.rect;
+    if (signDrag.mode === "move") {
+      r.x = Math.max(0, Math.min(pg.w - r.w, p.x - signDrag.dx));
+      r.y = Math.max(0, Math.min(pg.h - r.h, p.y - signDrag.dy));
+    } else {
+      let w = Math.max(40, Math.min(pg.w - r.x, p.x - r.x));
+      let h = (w * t.h) / t.w;
+      if (r.y + h > pg.h) { h = pg.h - r.y; w = (h * t.w) / t.h; }
+      r.w = w; r.h = h;
+      signWidth.value = Math.round(w);
+    }
+    drawSignPreview();
+  });
+  function signEndDrag() { signDrag = null; }
+  signPreviewCanvas.addEventListener("pointerup", signEndDrag);
+  signPreviewCanvas.addEventListener("pointercancel", signEndDrag);
 
   signPickBtn.addEventListener("click", (e) => { e.stopPropagation(); signFileInput.click(); });
   signDropzone.addEventListener("click", () => signFileInput.click());
@@ -1952,38 +2058,57 @@
       const doc = await pdfjsLib.getDocument({ data: bytes.slice() }).promise;
       const n = doc.numPages;
       doc.destroy();
-      Object.assign(signState, { bytes: bytes, name: file.name, numPages: n, page: 1 });
+      Object.assign(signState, { bytes: bytes, name: file.name, numPages: n, page: 1, rect: null, pageImg: null });
       signFileName.textContent = file.name;
       signPageCount.textContent = n + " halaman";
       signPageTotal.textContent = n;
       signPage.max = n; signPage.value = 1;
       signWork.hidden = false;
       signResultInfo.hidden = true;
-      drawSignPreview();
+      renderSignPage();
       toast("PDF dimuat: " + n + " halaman");
     } catch (err) { console.error(err); toast("Gagal baca PDF"); }
   }
 
   signPage.addEventListener("change", () => {
     signPage.value = Math.max(1, Math.min(signState.numPages, +signPage.value || 1));
+    renderSignPage();
+  });
+  signPrevPage.addEventListener("click", () => { signPage.value = Math.max(1, (+signPage.value || 1) - 1); renderSignPage(); });
+  signNextPage.addEventListener("click", () => { signPage.value = Math.min(signState.numPages, (+signPage.value || 1) + 1); renderSignPage(); });
+  // Preset posisi cepat: menaruh ulang rect ke kiri/tengah/kanan bawah.
+  signPos.addEventListener("change", () => {
+    const t = signTrimmedCanvas();
+    if (t && signState.pageImg && signState.rect) {
+      signState.rect = U.signatureRect(signState.pageImg.w, signState.pageImg.h, t.w, t.h, signPos.value, signState.rect.w, 36);
+      signWidth.value = Math.round(signState.rect.w);
+    }
     drawSignPreview();
   });
-  signPrevPage.addEventListener("click", () => { signPage.value = Math.max(1, (+signPage.value || 1) - 1); drawSignPreview(); });
-  signNextPage.addEventListener("click", () => { signPage.value = Math.min(signState.numPages, (+signPage.value || 1) + 1); drawSignPreview(); });
-  signPos.addEventListener("change", drawSignPreview);
-  signWidth.addEventListener("input", drawSignPreview);
+  signWidth.addEventListener("input", () => {
+    const t = signTrimmedCanvas();
+    const r = signState.rect, pg = signState.pageImg;
+    if (t && r && pg) {
+      let w = Math.max(40, Math.min(pg.w - r.x, +signWidth.value || 150));
+      let h = (w * t.h) / t.w;
+      if (r.y + h > pg.h) { h = pg.h - r.y; w = (h * t.w) / t.h; }
+      r.w = w; r.h = h;
+    }
+    drawSignPreview();
+  });
 
   signApplyBtn.addEventListener("click", async () => {
     if (!signState.bytes) { toast("Pilih dulu file PDF-nya"); return; }
     const png = signPngBytes();
     if (!png) { toast("Gambar dulu tanda tanganmu di kanvas atas"); return; }
+    if (!signState.rect) { toast("Tanda tangan belum ditempatkan di pratinjau"); return; }
     signApplyBtn.disabled = true;
     const oldLabel = signApplyBtn.innerHTML;
     signApplyBtn.innerHTML = '<span class="msr">hourglass_top</span> Menempel…';
     signResultInfo.hidden = true;
     try {
       const bytes = await U.applySignature(PDFLib, signState.bytes, png, {
-        page: +signPage.value || 1, pos: signPos.value, width: +signWidth.value || 150,
+        page: +signPage.value || 1, rect: signState.rect,
       });
       const outName = U.resolveFileName(signState.name.replace(/\.pdf$/i, "") + "-ditandatangani");
       signResultInfo.textContent = "Ukuran hasil: " + U.fmtSize(bytes.length) + " · halaman " + (+signPage.value || 1);

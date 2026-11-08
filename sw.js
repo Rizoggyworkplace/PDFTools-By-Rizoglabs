@@ -4,7 +4,7 @@
  *  - aset lokal (css/js/manifest/ikon): cache-first, lalu update dari network
  *  - CDN (pdf.js/pdf-lib/jszip/fonts): stale-while-revalidate
  */
-const CACHE = "pdf-tools-v4";
+const CACHE = "pdf-tools-v5";
 const SHELL = [
   "./",
   "./index.html",
